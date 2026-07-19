@@ -41,6 +41,14 @@ table and choose **Edit part**. To remove a part, select it and press **Delete**
 Aerocel Forge shows attached children before deleting and automatically removes
 linked joints and propulsion setup. It will not let a project lose its last part.
 
+You can also click any part in the left navigator to go straight to its editor.
+The **How this part works** section changes with the selected part. It provides
+plain-language controls for motor thrust, power, current and KV; propeller size,
+pitch and blades; battery configuration; wing and body dimensions; accessory
+power; and part weight. A motor's **Maximum thrust** is the user-entered limit for
+that motor-and-propeller unit and is used by the flight simulator. Use measured
+thrust-stand data when available; the nearby propeller value is only an estimate.
+
 The inspection panel reports bounds, area, signed/absolute volume, connected
 bodies, duplicate and degenerate faces, boundary and non-manifold edges, likely
 inverted normals, triangle quality, thin-axis ratio, and watertightness. DAT and

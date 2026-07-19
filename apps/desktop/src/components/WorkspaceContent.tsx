@@ -56,7 +56,7 @@ import {
   Upload,
   Wind
 } from "lucide-react";
-import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { WorkspaceId } from "../App";
 import type { AnalysisOptions, RapidAnalysis } from "../lib/analysis";
 import { createDiagnosticBundle, hashText, writeReport, type SystemProfile } from "../lib/native";
@@ -66,6 +66,7 @@ import { EngineeringPlot } from "./EngineeringPlot";
 import { FlightLab } from "./FlightLab";
 import { GeometryImportDialog } from "./GeometryImportDialog";
 import { InfoTip } from "./InfoTip";
+import { ComponentPropertiesEditor } from "./ComponentPropertiesEditor";
 
 interface WorkspaceContentProps {
   readonly workspace: WorkspaceId;
@@ -275,8 +276,14 @@ function downloadJson(fileName: string, value: unknown): void {
 
 function GeometryWorkspace(props: WorkspaceContentProps) {
   const selected = props.selectedComponent;
-  const [nameDraft, setNameDraft] = useState(selected?.name ?? "");
-  useEffect(() => setNameDraft(selected?.name ?? ""), [selected?.id, selected?.name]);
+  const [nameEdit, setNameEdit] = useState<{
+    readonly componentId: string;
+    readonly value: string;
+  } | null>(null);
+  const nameDraft =
+    selected !== null && nameEdit?.componentId === selected.id
+      ? nameEdit.value
+      : (selected?.name ?? "");
   const disallowedParentIds = useMemo(() => {
     const blocked = new Set<string>();
     if (selected === null) return blocked;
@@ -314,9 +321,10 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
     if (selected === null) return;
     const name = nameDraft.trim();
     if (name === "") {
-      setNameDraft(selected.name);
+      setNameEdit({ componentId: selected.id, value: selected.name });
       return;
     }
+    setNameEdit({ componentId: selected.id, value: name });
     if (name !== selected.name) updateSelected((component) => ({ ...component, name }));
   };
   const updateTransformVector = (
@@ -334,6 +342,12 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
   };
   const toggleViewport = (key: keyof ViewportOptions): void =>
     props.setViewportOptions((current) => ({ ...current, [key]: !current[key] }));
+  const selectedPropulsionUnit = props.project.vehicle.propulsionUnits.find(
+    (unit) => unit.motorComponentId === selected?.id || unit.propellerComponentId === selected?.id
+  );
+  const selectedEstimatedThrustN =
+    props.analysis.propellers.find((item) => item.unitId === selectedPropulsionUnit?.id)?.result
+      .thrustN ?? props.analysis.propeller.thrustN;
   return (
     <div className="geometry-workspace">
       <section className="viewport-panel">
@@ -476,12 +490,14 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                   className="inspector-control inspector-control--text"
                   value={nameDraft}
                   maxLength={80}
-                  onChange={(event) => setNameDraft(event.target.value)}
+                  onChange={(event) =>
+                    setNameEdit({ componentId: selected.id, value: event.target.value })
+                  }
                   onBlur={commitSelectedName}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") event.currentTarget.blur();
                     if (event.key === "Escape") {
-                      setNameDraft(selected.name);
+                      setNameEdit({ componentId: selected.id, value: selected.name });
                       event.currentTarget.blur();
                     }
                   }}
@@ -562,6 +578,15 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                 <Trash2 size={14} /> Delete this part
               </button>
             </section>
+            <ComponentPropertiesEditor
+              key={selected.id}
+              component={selected}
+              project={props.project}
+              setProject={props.setProject}
+              estimatedThrustN={selectedEstimatedThrustN}
+              advancedMode={props.advancedMode}
+              notify={props.notify}
+            />
             <section className="inspector-section">
               <h3 className="heading-with-help">
                 Position on aircraft · metres
@@ -1255,6 +1280,7 @@ function PropulsionWorkspace(props: WorkspaceContentProps) {
           </div>
           {props.project.vehicle.propulsionUnits.map((unit) => {
             const joint = props.project.vehicle.joints.find((item) => item.id === unit.jointId);
+            const unitEstimate = props.analysis.propellers.find((item) => item.unitId === unit.id);
             return (
               <div className="propulsion-row" key={unit.id}>
                 <div className="propulsion-icon">
@@ -1281,6 +1307,10 @@ function PropulsionWorkspace(props: WorkspaceContentProps) {
                 <div>
                   <small>Limits</small>
                   <strong>{unit.motor.maxCurrentA} A</strong>
+                </div>
+                <div>
+                  <small>Thrust</small>
+                  <strong>{unitEstimate?.result.thrustN.toFixed(1) ?? "—"} N</strong>
                 </div>
               </div>
             );

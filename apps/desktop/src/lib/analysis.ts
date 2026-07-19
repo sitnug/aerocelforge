@@ -21,6 +21,7 @@ import {
   type SlipstreamResult
 } from "@aerocel/propulsion-models";
 import type { AerocelProject } from "@aerocel/simulation-schema";
+import { configuredMotorThrustN } from "./componentProperties";
 
 export interface RapidAnalysis {
   readonly mass: CombinedMassProperties;
@@ -35,6 +36,10 @@ export interface RapidAnalysis {
   readonly glide: GlideEnvelope;
   readonly trim: ReturnType<typeof solveStraightLevelTrim>;
   readonly propeller: BemtResult;
+  readonly propellers: readonly {
+    readonly unitId: string;
+    readonly result: BemtResult;
+  }[];
   readonly battery: BatteryOperatingPoint;
   readonly slipstream: SlipstreamResult;
   readonly transition: TransitionResult;
@@ -84,6 +89,65 @@ const inputForAero = (
   stallAnglePositiveRad: (13 * Math.PI) / 180,
   maximumLiftCoefficient: 1.35
 });
+
+function solvePropeller(
+  bladeCount: number,
+  diameterM: number,
+  pitchM: number,
+  rpm: number,
+  axialVelocityMS: number,
+  densityKgM3: number,
+  speedOfSoundMS: number,
+  rotation: "CW" | "CCW"
+): BemtResult {
+  const radius = diameterM / 2;
+  const referencePitchM = 0.18 * (diameterM / 0.43);
+  const twistFor = (radiusFraction: number, referenceTwistRad: number): number => {
+    const radialPosition = radius * radiusFraction;
+    const pitchAngle = Math.atan2(pitchM, 2 * Math.PI * radialPosition);
+    const referencePitchAngle = Math.atan2(referencePitchM, 2 * Math.PI * radialPosition);
+    return referenceTwistRad + pitchAngle - referencePitchAngle;
+  };
+  return solveBemt({
+    bladeCount,
+    diameterM,
+    hubRadiusM: radius * 0.18,
+    rpm,
+    axialVelocityMS,
+    densityKgM3,
+    speedOfSoundMS,
+    rotation,
+    stations: [
+      {
+        radiusM: radius * 0.19,
+        chordM: radius * 0.18,
+        twistRad: twistFor(0.19, 0.5),
+        liftCurveSlopePerRad: 5.7,
+        zeroLiftAngleRad: -0.03,
+        cd0: 0.018,
+        inducedDragFactor: 0.02
+      },
+      {
+        radiusM: radius * 0.56,
+        chordM: radius * 0.14,
+        twistRad: twistFor(0.56, 0.33),
+        liftCurveSlopePerRad: 5.7,
+        zeroLiftAngleRad: -0.03,
+        cd0: 0.016,
+        inducedDragFactor: 0.02
+      },
+      {
+        radiusM: radius * 0.98,
+        chordM: radius * 0.08,
+        twistRad: twistFor(0.98, 0.2),
+        liftCurveSlopePerRad: 5.7,
+        zeroLiftAngleRad: -0.03,
+        cd0: 0.015,
+        inducedDragFactor: 0.02
+      }
+    ]
+  });
+}
 
 export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptions): RapidAnalysis {
   if (options.additionalDragCounts < 0 || !Number.isFinite(options.additionalDragCounts)) {
@@ -152,51 +216,38 @@ export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptio
     inducedDragFactor,
     maximumLiftCoefficient: 1.35
   });
+  const axialVelocityMS = Math.max(0, options.airspeedMS * 0.25);
+  const propellers = project.vehicle.propulsionUnits.map((unit) => ({
+    unitId: unit.id,
+    result: solvePropeller(
+      unit.bladeCount,
+      unit.diameterM,
+      unit.pitchM,
+      options.propellerRpm,
+      axialVelocityMS,
+      atmosphere.densityKgM3,
+      atmosphere.speedOfSoundMS,
+      unit.rotation
+    )
+  }));
+  const propeller =
+    propellers[0]?.result ??
+    solvePropeller(
+      2,
+      0.43,
+      0.18,
+      options.propellerRpm,
+      axialVelocityMS,
+      atmosphere.densityKgM3,
+      atmosphere.speedOfSoundMS,
+      "CW"
+    );
   const diameterM = project.vehicle.propulsionUnits[0]?.diameterM ?? 0.43;
-  const radius = diameterM / 2;
-  const propeller = solveBemt({
-    bladeCount: 2,
-    diameterM,
-    hubRadiusM: radius * 0.18,
-    rpm: options.propellerRpm,
-    axialVelocityMS: Math.max(0, options.airspeedMS * 0.25),
-    densityKgM3: atmosphere.densityKgM3,
-    speedOfSoundMS: atmosphere.speedOfSoundMS,
-    rotation: "CW",
-    stations: [
-      {
-        radiusM: radius * 0.19,
-        chordM: radius * 0.18,
-        twistRad: 0.5,
-        liftCurveSlopePerRad: 5.7,
-        zeroLiftAngleRad: -0.03,
-        cd0: 0.018,
-        inducedDragFactor: 0.02
-      },
-      {
-        radiusM: radius * 0.56,
-        chordM: radius * 0.14,
-        twistRad: 0.33,
-        liftCurveSlopePerRad: 5.7,
-        zeroLiftAngleRad: -0.03,
-        cd0: 0.016,
-        inducedDragFactor: 0.02
-      },
-      {
-        radiusM: radius * 0.98,
-        chordM: radius * 0.08,
-        twistRad: 0.2,
-        liftCurveSlopePerRad: 5.7,
-        zeroLiftAngleRad: -0.03,
-        cd0: 0.015,
-        inducedDragFactor: 0.02
-      }
-    ]
-  });
-  const estimatedMotorCurrentA = Math.min(
-    120,
-    Math.max(0, (propeller.shaftPowerW * 3) / (22.2 * 0.86))
+  const totalShaftPowerW = propellers.reduce(
+    (sum, item) => sum + Math.max(0, item.result.shaftPowerW),
+    0
   );
+  const estimatedMotorCurrentA = Math.min(120, Math.max(0, totalShaftPowerW / (22.2 * 0.86)));
   const batteryInput = project.vehicle.batteries[0];
   if (batteryInput === undefined) throw new Error("Rapid analysis requires a configured battery");
   const battery = evaluateBattery(
@@ -218,12 +269,20 @@ export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptio
     atmosphere.densityKgM3,
     Math.max(0, options.airspeedMS * 0.25)
   );
+  const estimatedTotalThrustN = project.vehicle.propulsionUnits.reduce((sum, unit) => {
+    const result = propellers.find((item) => item.unitId === unit.id)?.result;
+    return sum + (configuredMotorThrustN(project, unit.motorComponentId) ?? result?.thrustN ?? 0);
+  }, 0);
+  const maximumPowerW = project.vehicle.propulsionUnits.reduce(
+    (sum, unit) => sum + unit.motor.maxPowerW,
+    0
+  );
   const transition = simulateTransition({
     massKg: mass.massKg,
     wingAreaM2: project.vehicle.reference.areaM2,
     densityKgM3: atmosphere.densityKgM3,
-    maximumTotalThrustN: mass.massKg * 9.80665 * 1.55,
-    maximumPowerW: 3_900,
+    maximumTotalThrustN: Math.max(0.001, estimatedTotalThrustN),
+    maximumPowerW: Math.max(1, maximumPowerW),
     initialAltitudeM: 40,
     initialAirspeedMS: 0,
     durationS: 9,
@@ -281,6 +340,7 @@ export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptio
     glide,
     trim,
     propeller,
+    propellers,
     battery,
     slipstream,
     transition,

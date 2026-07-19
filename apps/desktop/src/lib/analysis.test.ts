@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { defaultAnalysisOptions, runRapidAnalysis } from "./analysis";
+import { setComponentEngineeringValue } from "./componentProperties";
 import { kestrelProject } from "./kestrel";
 
 describe("Kestrel integrated engineering analysis", () => {
@@ -32,6 +33,33 @@ describe("Kestrel integrated engineering analysis", () => {
     );
     expect(withIncrement.transition.points[2]?.dragN).toBeGreaterThan(
       baseline.transition.points[2]?.dragN ?? Number.POSITIVE_INFINITY
+    );
+  });
+
+  it("uses edited motor thrust and propeller dimensions in live calculations", () => {
+    const firstUnit = kestrelProject.vehicle.propulsionUnits[0];
+    expect(firstUnit).toBeDefined();
+    let updated = setComponentEngineeringValue(
+      kestrelProject,
+      firstUnit?.motorComponentId ?? "",
+      "maximumThrustN",
+      60
+    );
+    updated = setComponentEngineeringValue(
+      updated,
+      firstUnit?.propellerComponentId ?? "",
+      "diameterM",
+      0.52
+    );
+    const baseline = runRapidAnalysis(kestrelProject, defaultAnalysisOptions);
+    const changed = runRapidAnalysis(updated, defaultAnalysisOptions);
+
+    expect(changed.propellers[0]?.result.thrustN).not.toBeCloseTo(
+      baseline.propellers[0]?.result.thrustN ?? 0,
+      6
+    );
+    expect(changed.transition.points[0]?.thrustN).toBeGreaterThan(
+      baseline.transition.points[0]?.thrustN ?? 0
     );
   });
 });

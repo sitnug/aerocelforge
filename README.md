@@ -45,6 +45,12 @@ check. Right-click a 3D part, navigator item, or Parts table row to edit or dele
 it. Deleting a parent also lists and removes its attached children, joints, and
 motor setup so saved projects never contain broken links.
 
+Clicking any part in the left navigator opens its property editor. Type-specific
+settings include motor thrust/power/current/KV, propeller diameter/pitch/blades,
+battery cells/capacity/current/charge, wing dimensions, body dimensions, part
+weight, visibility, and colour. Linked propulsion and battery records update with
+the part, and motor thrust limits feed the flight simulator.
+
 To fly the loaded vehicle, open **Fly**. The Flight Simulator provides
 on-screen Mode 2 sticks, keyboard and standard gamepad control, hover and cruise
 starts, stabilization/altitude/return-home modes, wind and autopilot targets,

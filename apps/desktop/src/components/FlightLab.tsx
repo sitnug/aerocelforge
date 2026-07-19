@@ -24,6 +24,7 @@ import {
   type PointerEvent as ReactPointerEvent
 } from "react";
 import type { AnalysisOptions, RapidAnalysis } from "../lib/analysis";
+import { configuredMotorThrustN } from "../lib/componentProperties";
 import {
   compileFlightProgram,
   createInitialFlightState,
@@ -211,22 +212,39 @@ export function FlightLab(props: FlightLabProps) {
           battery.stateOfCharge;
     const nominalVoltageV =
       battery === undefined ? 22.2 : battery.series * battery.cellOpenCircuitVoltageV;
-    const propulsionUnitCount = Math.max(1, props.project.vehicle.propulsionUnits.length);
     const estimatedElectricalPowerW = Math.max(
       1,
-      (Math.abs(props.analysis.propeller.shaftPowerW) * propulsionUnitCount) / 0.86
+      props.analysis.propellers.reduce(
+        (sum, item) => sum + Math.abs(item.result.shaftPowerW) / 0.86,
+        0
+      )
     );
     const batteryPowerLimitW =
       battery === undefined
         ? estimatedElectricalPowerW
         : nominalVoltageV * battery.maxContinuousCurrentA;
-    const maximumPowerW = Math.min(estimatedElectricalPowerW, batteryPowerLimitW);
+    const motorPowerLimitW = props.project.vehicle.propulsionUnits.reduce(
+      (sum, unit) => sum + unit.motor.maxPowerW,
+      0
+    );
+    const maximumPowerW = Math.min(
+      estimatedElectricalPowerW,
+      batteryPowerLimitW,
+      Math.max(1, motorPowerLimitW)
+    );
     const powerLimitRatio = clamp(maximumPowerW / estimatedElectricalPowerW, 0, 1);
+    const configuredTotalThrustN = props.project.vehicle.propulsionUnits.reduce((sum, unit) => {
+      const calculated = props.analysis.propellers.find((item) => item.unitId === unit.id)?.result
+        .thrustN;
+      return (
+        sum +
+        (configuredMotorThrustN(props.project, unit.motorComponentId) ??
+          Math.max(0, calculated ?? props.analysis.propeller.thrustN))
+      );
+    }, 0);
     const maximumTotalThrustN = Math.max(
       0.001,
-      Math.max(0, props.analysis.propeller.thrustN) *
-        propulsionUnitCount *
-        powerLimitRatio ** (2 / 3)
+      configuredTotalThrustN * powerLimitRatio ** (2 / 3)
     );
     return {
       massKg: props.analysis.mass.massKg,

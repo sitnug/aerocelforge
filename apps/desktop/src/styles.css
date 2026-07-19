@@ -1131,6 +1131,132 @@ kbd {
   margin-top: 12px;
 }
 
+.inspector-section--engineering {
+  background: color-mix(in srgb, var(--surface-subtle) 34%, transparent);
+}
+
+.engineering-fields {
+  display: grid;
+  gap: 2px;
+}
+
+.engineering-number-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(96px, 42%);
+  align-items: center;
+  gap: 7px;
+  min-height: 38px;
+  padding: 5px 0;
+  border-bottom: 1px dotted color-mix(in srgb, var(--line) 75%, transparent);
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.engineering-number-field__control {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.engineering-number-field input {
+  width: 100%;
+  min-width: 0;
+  height: 29px;
+  padding: 0 7px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  outline: 0;
+  background: var(--surface);
+  color: var(--text-soft);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.engineering-number-field input:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.engineering-number-field__control > small {
+  min-width: 17px;
+  color: var(--faint);
+  font-size: 8px;
+  text-align: right;
+}
+
+.engineering-number-field.field--error input {
+  border-color: var(--danger);
+}
+
+.engineering-number-field > .field-error {
+  grid-column: 1 / -1;
+  color: var(--danger);
+  font-size: 8px;
+}
+
+.property-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding: 9px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+  border-radius: var(--radius-sm);
+  background: var(--accent-muted);
+  color: var(--accent-strong);
+}
+
+.property-summary--weight {
+  border-color: var(--line);
+  background: var(--surface-subtle);
+  color: var(--muted);
+}
+
+.property-summary > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.property-summary small {
+  color: var(--faint);
+  font-size: 7px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.property-summary strong {
+  color: var(--text-soft);
+  font-size: 10px;
+}
+
+.part-appearance-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 11px;
+}
+
+.part-color-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.part-color-control input {
+  width: 29px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
 .compact-toggle {
   display: inline-flex;
   align-items: center;
@@ -2044,7 +2170,7 @@ kbd {
 
 .propulsion-row {
   display: grid;
-  grid-template-columns: 36px minmax(180px, 1fr) repeat(3, minmax(65px, auto));
+  grid-template-columns: 36px minmax(160px, 1fr) repeat(4, minmax(58px, auto));
   gap: 12px;
   min-height: 61px;
   padding: 9px 0;

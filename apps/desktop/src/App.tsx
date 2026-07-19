@@ -1073,7 +1073,7 @@ export default function App() {
             onPartContextMenu={openPartContextMenu}
             onSelect={(id) => {
               setSelectedId(id);
-              if (activeWorkspace === "home") setActiveWorkspace("geometry");
+              setActiveWorkspace("geometry");
             }}
           />
         )}
