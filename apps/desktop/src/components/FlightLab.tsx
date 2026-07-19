@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   Gamepad2,
   Gauge,
+  Keyboard,
   Maximize2,
   Minimize2,
   Pause,
@@ -25,6 +26,14 @@ import {
 } from "react";
 import type { AnalysisOptions, RapidAnalysis } from "../lib/analysis";
 import { configuredMotorThrustN } from "../lib/componentProperties";
+import {
+  applyKeyboardThrottle,
+  isFlightKeyboardCode,
+  isKeyboardControlPressed,
+  keyboardFlightAxes,
+  keyboardThrottleDirection,
+  type FlightInputMethod
+} from "../lib/flightInput";
 import {
   compileFlightProgram,
   createInitialFlightState,
@@ -80,6 +89,12 @@ function initialViewportHeight(): number {
   if (window.innerWidth <= 900) return 380;
   if (window.innerWidth <= 1_200) return 430;
   return 520;
+}
+
+function initialInputMethod(): FlightInputMethod {
+  return localStorage.getItem("aerocel.flight.inputMethod") === "keyboard"
+    ? "keyboard"
+    : "controller";
 }
 
 function initialPilot(model: FlightModel, preset: FlightPreset): PilotInput {
@@ -281,6 +296,8 @@ export function FlightLab(props: FlightLabProps) {
   const [compileResult, setCompileResult] = useState<ProgramCompileResult>(() =>
     compileFlightProgram(localStorage.getItem("aerocel.flight.program") ?? DEFAULT_PROGRAM)
   );
+  const [inputMethod, setInputMethod] = useState<FlightInputMethod>(initialInputMethod);
+  const [pressedKeyboardCodes, setPressedKeyboardCodes] = useState<readonly string[]>([]);
   const [gamepadName, setGamepadName] = useState<string | null>(null);
   const [viewportHeight, setViewportHeight] = useState(initialViewportHeight);
   const [focusMode, setFocusMode] = useState(false);
@@ -322,6 +339,13 @@ export function FlightLab(props: FlightLabProps) {
       targetAltitudeM: nextPreset === "hover" ? 30 : 40,
       targetAirspeedMS: nextPreset === "hover" ? 0 : 22
     }));
+  };
+
+  const chooseInputMethod = (nextMethod: FlightInputMethod): void => {
+    setInputMethod(nextMethod);
+    localStorage.setItem("aerocel.flight.inputMethod", nextMethod);
+    setPressedKeyboardCodes([]);
+    setPilot((current) => ({ ...current, roll: 0, pitch: 0, yaw: 0 }));
   };
 
   useEffect(() => {
@@ -379,33 +403,46 @@ export function FlightLab(props: FlightLabProps) {
   }, [flight.phase]);
 
   useEffect(() => {
+    if (inputMethod !== "keyboard") {
+      setPressedKeyboardCodes([]);
+      return;
+    }
     const pressed = new Set<string>();
+    let frameId = 0;
+    let previousTime = performance.now();
     const isTypingTarget = (target: EventTarget | null): boolean =>
       target instanceof HTMLInputElement ||
       target instanceof HTMLTextAreaElement ||
       target instanceof HTMLSelectElement;
-    const updateAxis = (): void => {
-      setPilot((current) => ({
-        ...current,
-        roll: pressed.has("ArrowLeft") ? -1 : pressed.has("ArrowRight") ? 1 : 0,
-        pitch: pressed.has("ArrowUp") ? 1 : pressed.has("ArrowDown") ? -1 : 0,
-        yaw: pressed.has("KeyA") ? -1 : pressed.has("KeyD") ? 1 : 0
-      }));
+    const syncPressedKeys = (): void => setPressedKeyboardCodes([...pressed]);
+    const updateAxes = (): void => {
+      const axes = keyboardFlightAxes(pressed);
+      setPilot((current) =>
+        current.roll === axes.roll && current.pitch === axes.pitch && current.yaw === 0
+          ? current
+          : { ...current, ...axes, yaw: 0 }
+      );
+    };
+    const releaseAll = (): void => {
+      pressed.clear();
+      syncPressedKeys();
+      updateAxes();
     };
     const keyDown = (event: KeyboardEvent): void => {
-      if (isTypingTarget(event.target)) return;
+      if (isTypingTarget(event.target) || !isFlightKeyboardCode(event.code)) return;
+      pressed.add(event.code);
+      syncPressedKeys();
+      updateAxes();
       if (
-        ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "KeyA", "KeyD"].includes(event.code)
+        !event.repeat &&
+        ["ShiftLeft", "ShiftRight", "Shift", "ControlLeft", "ControlRight", "Control"].includes(
+          event.code
+        )
       ) {
-        pressed.add(event.code);
-        updateAxis();
-        event.preventDefault();
-      }
-      if (!event.repeat && event.code === "KeyW") {
-        setPilot((current) => ({ ...current, throttle: clamp(current.throttle + 0.04, 0, 1) }));
-      }
-      if (!event.repeat && event.code === "KeyS") {
-        setPilot((current) => ({ ...current, throttle: clamp(current.throttle - 0.04, 0, 1) }));
+        setPilot((current) => ({
+          ...current,
+          throttle: applyKeyboardThrottle(current.throttle, pressed, 0.08)
+        }));
       }
       if (!event.repeat && event.code === "KeyQ") {
         setPilot((current) => ({
@@ -419,22 +456,38 @@ export function FlightLab(props: FlightLabProps) {
           tiltRad: clamp(current.tiltRad - (5 * Math.PI) / 180, 0, Math.PI / 2)
         }));
       }
-      if (!event.repeat && event.code === "Space") {
-        setRunning((current) => !current);
-        event.preventDefault();
-      }
+      if (!event.repeat && event.code === "Space") setRunning((current) => !current);
+      event.preventDefault();
     };
     const keyUp = (event: KeyboardEvent): void => {
+      if (!isFlightKeyboardCode(event.code)) return;
       pressed.delete(event.code);
-      updateAxis();
+      syncPressedKeys();
+      updateAxes();
+      event.preventDefault();
+    };
+    const updateThrottle = (time: number): void => {
+      const elapsedSeconds = (time - previousTime) / 1_000;
+      previousTime = time;
+      if (keyboardThrottleDirection(pressed) !== 0) {
+        setPilot((current) => {
+          const throttle = applyKeyboardThrottle(current.throttle, pressed, elapsedSeconds);
+          return throttle === current.throttle ? current : { ...current, throttle };
+        });
+      }
+      frameId = window.requestAnimationFrame(updateThrottle);
     };
     window.addEventListener("keydown", keyDown);
     window.addEventListener("keyup", keyUp);
+    window.addEventListener("blur", releaseAll);
+    frameId = window.requestAnimationFrame(updateThrottle);
     return () => {
+      window.cancelAnimationFrame(frameId);
       window.removeEventListener("keydown", keyDown);
       window.removeEventListener("keyup", keyUp);
+      window.removeEventListener("blur", releaseAll);
     };
-  }, []);
+  }, [inputMethod]);
 
   useEffect(() => {
     if (!focusMode) return;
@@ -460,20 +513,22 @@ export function FlightLab(props: FlightLabProps) {
         const throttle = clamp((1 - (gamepad.axes[1] ?? 0)) / 2, 0, 1);
         const roll = clamp(deadband(gamepad.axes[2] ?? 0), -1, 1);
         const pitch = clamp(-deadband(gamepad.axes[3] ?? 0), -1, 1);
-        setPilot((current) =>
-          current.yaw === yaw &&
-          current.throttle === throttle &&
-          current.roll === roll &&
-          current.pitch === pitch
-            ? current
-            : { ...current, yaw, throttle, roll, pitch }
-        );
+        if (inputMethod === "controller") {
+          setPilot((current) =>
+            current.yaw === yaw &&
+            current.throttle === throttle &&
+            current.roll === roll &&
+            current.pitch === pitch
+              ? current
+              : { ...current, yaw, throttle, roll, pitch }
+          );
+        }
       }
       frameId = window.requestAnimationFrame(poll);
     };
     frameId = window.requestAnimationFrame(poll);
     return () => window.cancelAnimationFrame(frameId);
-  }, []);
+  }, [inputMethod]);
 
   const telemetry = deriveFlightTelemetry(model, flight);
   const flightViewportOptions: ViewportOptions = {
@@ -491,6 +546,7 @@ export function FlightLab(props: FlightLabProps) {
     telemetry.loadFactor > 3.5;
   const insufficientHoverThrust = model.maximumTotalThrustN < model.massKg * 9.80665;
   const displayedPhase = !running && flight.phase === "flying" ? "paused" : flight.phase;
+  const pressedKeyboardSet = new Set(pressedKeyboardCodes);
 
   return (
     <div className="scroll-workspace flight-lab">
@@ -500,8 +556,8 @@ export function FlightLab(props: FlightLabProps) {
           <h1>Fly your {props.project.vehicle.name} model</h1>
           <div className="workspace-header__description">
             <p>
-              Use the on-screen remote, keyboard, or gamepad. You can also set automatic targets or
-              write a simple route program.
+              Choose keyboard or controller controls, then fly by hand. You can also set automatic
+              targets or write a simple route program.
             </p>
             <InfoTip label="What this simulator does">
               It calculates the aircraft’s movement, airflow forces, motor thrust, wind, and battery
@@ -684,18 +740,51 @@ export function FlightLab(props: FlightLabProps) {
         <section className="section-card remote-panel">
           <div className="section-card__header">
             <span>
-              <small>REMOTE CONTROL</small>
+              <small>FLIGHT CONTROLS</small>
               <h2 className="heading-with-help">
-                On-screen remote
-                <InfoTip label="Remote layout">
-                  This uses the common “Mode 2” layout: the left stick controls power and turning;
-                  the right stick controls nose up/down and banking left/right.
+                Choose how to fly
+                <InfoTip label="Control choices">
+                  Keyboard uses the keys shown below. Controller uses the on-screen sticks or a
+                  connected USB or Bluetooth game controller. Only the selected control type can
+                  move the aircraft.
                 </InfoTip>
               </h2>
             </span>
-            <span className={gamepadName === null ? "remote-link" : "remote-link is-connected"}>
-              <Gamepad2 size={14} /> {gamepadName === null ? "Awaiting gamepad" : "Gamepad live"}
-            </span>
+            {inputMethod === "keyboard" ? (
+              <span className="remote-link is-connected">
+                <Keyboard size={14} /> Keyboard active
+              </span>
+            ) : (
+              <span className={gamepadName === null ? "remote-link" : "remote-link is-connected"}>
+                <Gamepad2 size={14} /> {gamepadName === null ? "On-screen sticks" : "Gamepad live"}
+              </span>
+            )}
+          </div>
+          <div className="control-method-selector" role="group" aria-label="Choose flight controls">
+            <button
+              type="button"
+              className={inputMethod === "controller" ? "is-active" : ""}
+              aria-pressed={inputMethod === "controller"}
+              onClick={() => chooseInputMethod("controller")}
+            >
+              <Gamepad2 size={16} />
+              <span>
+                <strong>Controller</strong>
+                <small>Sticks or gamepad</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={inputMethod === "keyboard" ? "is-active" : ""}
+              aria-pressed={inputMethod === "keyboard"}
+              onClick={() => chooseInputMethod("keyboard")}
+            >
+              <Keyboard size={16} />
+              <span>
+                <strong>Keyboard</strong>
+                <small>W, A, S, D + keys</small>
+              </span>
+            </button>
           </div>
           <div className="mode-selector" aria-label="Flight mode">
             {(["manual", "stabilize", "altitude_hold", "return_home"] as const).map((selection) => (
@@ -709,28 +798,67 @@ export function FlightLab(props: FlightLabProps) {
               </button>
             ))}
           </div>
-          <div className="remote-sticks">
-            <RemoteStick
-              label="LEFT STICK"
-              x={pilot.yaw}
-              y={pilot.throttle * 2 - 1}
-              xLabel="Yaw"
-              yLabel="Throttle"
-              onChange={(x, y) =>
-                setPilot((current) => ({ ...current, yaw: x, throttle: (y + 1) / 2 }))
-              }
-              onRelease={() => setPilot((current) => ({ ...current, yaw: 0 }))}
-            />
-            <RemoteStick
-              label="RIGHT STICK"
-              x={pilot.roll}
-              y={pilot.pitch}
-              xLabel="Roll"
-              yLabel="Pitch"
-              onChange={(x, y) => setPilot((current) => ({ ...current, roll: x, pitch: y }))}
-              onRelease={() => setPilot((current) => ({ ...current, roll: 0, pitch: 0 }))}
-            />
-          </div>
+          {inputMethod === "controller" ? (
+            <div className="remote-sticks">
+              <RemoteStick
+                label="LEFT STICK"
+                x={pilot.yaw}
+                y={pilot.throttle * 2 - 1}
+                xLabel="Yaw"
+                yLabel="Throttle"
+                onChange={(x, y) =>
+                  setPilot((current) => ({ ...current, yaw: x, throttle: (y + 1) / 2 }))
+                }
+                onRelease={() => setPilot((current) => ({ ...current, yaw: 0 }))}
+              />
+              <RemoteStick
+                label="RIGHT STICK"
+                x={pilot.roll}
+                y={pilot.pitch}
+                xLabel="Roll"
+                yLabel="Pitch"
+                onChange={(x, y) => setPilot((current) => ({ ...current, roll: x, pitch: y }))}
+                onRelease={() => setPilot((current) => ({ ...current, roll: 0, pitch: 0 }))}
+              />
+            </div>
+          ) : (
+            <div className="keyboard-flight-controls" aria-label="Keyboard flight key map">
+              <div className="keyboard-key-grid">
+                {(
+                  [
+                    ["W", "Pitch down", "pitch-down"],
+                    ["S", "Pitch up", "pitch-up"],
+                    ["A", "Bank left", "left"],
+                    ["D", "Bank right", "right"],
+                    ["Shift", "More throttle", "throttle-up"],
+                    ["Ctrl", "Less throttle", "throttle-down"]
+                  ] as const
+                ).map(([key, label, control]) => (
+                  <div
+                    key={control}
+                    className={`keyboard-key ${isKeyboardControlPressed(pressedKeyboardSet, control) ? "is-active" : ""}`}
+                  >
+                    <kbd>{key}</kbd>
+                    <span>{label}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="keyboard-live-readout" aria-live="polite">
+                <span>
+                  <small>Pitch</small>
+                  <strong>{pilot.pitch === 0 ? "Center" : pilot.pitch < 0 ? "Down" : "Up"}</strong>
+                </span>
+                <span>
+                  <small>Bank</small>
+                  <strong>{pilot.roll === 0 ? "Center" : pilot.roll < 0 ? "Left" : "Right"}</strong>
+                </span>
+                <span>
+                  <small>Throttle</small>
+                  <strong>{(pilot.throttle * 100).toFixed(0)}%</strong>
+                </span>
+              </div>
+            </div>
+          )}
           <ChannelSlider
             label="Motor tilt"
             value={(pilot.tiltRad * 180) / Math.PI}
@@ -759,8 +887,9 @@ export function FlightLab(props: FlightLabProps) {
             </button>
           </div>
           <p className="control-hint">
-            Keyboard: arrows pitch/roll · A/D yaw · W/S throttle · Q/E tilt · Space run/pause.
-            Standard browser gamepads map automatically.
+            {inputMethod === "keyboard"
+              ? "Hold Shift or Ctrl to change throttle smoothly. Q/E changes motor tilt. Space starts or pauses the flight."
+              : "Use the on-screen sticks or a standard connected gamepad. The left stick handles throttle and turning; the right stick handles pitch and bank."}
           </p>
         </section>
 

@@ -13,8 +13,9 @@ FRD body and NED world frames only at the Three.js boundary.
 2. Choose **Hover start** or **Cruise start**, then select a flight mode.
 3. Use **Fly**, **Pause**, and **Reset** to control the deterministic run. The
    1x, 2x, and 4x controls change simulated time, not the fixed integration step.
-4. Fly the two on-screen Mode 2 sticks with pointer or keyboard focus, use a
-   standard connected gamepad, or use the global keyboard controls.
+4. Choose **Controller** or **Keyboard**. Controller mode accepts the two
+   on-screen Mode 2 sticks or a standard connected gamepad. Keyboard mode accepts
+   only the keyboard flight keys, so a connected gamepad cannot overwrite them.
 
 Use **View height** to resize the 3D stage from 360 to 800 pixels. The selected
 height is retained locally. **Focus** makes the simulator fill the application
@@ -27,11 +28,14 @@ The left stick controls yaw and throttle. The right stick controls roll and
 pitch. Releasing a pointer recenters yaw, roll, and pitch while retaining
 throttle, as a Mode 2 transmitter does. Motor tilt is an independent channel.
 
-Keyboard controls are arrows for pitch/roll, A/D for yaw, W/S for throttle,
-Q/E for motor tilt, and Space for run/pause. A standard gamepad maps axes 0/1 to
-yaw/throttle and axes 2/3 to roll/pitch with a small center deadband. Controller
-axis numbering varies by device and operating system, so verify the live channel
-readouts before relying on a physical transmitter or USB adapter.
+Keyboard controls are W for pitch down, S for pitch up, A for bank left, D for
+bank right, Shift for more throttle, Ctrl for less throttle, Q/E for motor tilt,
+and Space for run/pause. Hold Shift or Ctrl for a smooth throttle change. The
+live readout shows pitch, bank, and throttle, and pressed keys light up. A
+standard gamepad maps axes 0/1 to yaw/throttle and axes 2/3 to roll/pitch with a
+small center deadband. Controller axis numbering varies by device and operating
+system, so verify the live channel readouts before relying on a physical
+transmitter or USB adapter.
 
 ## Flight modes
 

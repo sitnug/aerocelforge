@@ -87,9 +87,11 @@ calibration workflow.
 
 Open **Fly** to control the currently loaded vehicle in the interactive Flight
 Lab. Choose a hover or cruise start, select Manual, Stabilize, Altitude hold, or
-Return home, then use the Mode 2 on-screen sticks, keyboard, or a standard
-gamepad. Arrows control pitch/roll, A/D yaw, W/S throttle, Q/E motor tilt, and
-Space starts or pauses the fixed-step simulation. Live telemetry includes
+Return home, then choose **Controller** or **Keyboard**. Controller mode accepts
+the Mode 2 on-screen sticks or a standard gamepad. In Keyboard mode, W pitches
+down, S pitches up, A banks left, D banks right, Shift raises throttle, and Ctrl
+lowers throttle. Q/E changes motor tilt and Space starts or pauses the fixed-step
+simulation. Live telemetry includes
 attitude, airspeed, altitude, wind-relative aerodynamic state, forces, power,
 position, trail, and battery use.
 

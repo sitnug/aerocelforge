@@ -52,7 +52,8 @@ weight, visibility, and colour. Linked propulsion and battery records update wit
 the part, and motor thrust limits feed the flight simulator.
 
 To fly the loaded vehicle, open **Fly**. The Flight Simulator provides
-on-screen Mode 2 sticks, keyboard and standard gamepad control, hover and cruise
+an explicit **Controller / Keyboard** choice, on-screen Mode 2 sticks, standard
+gamepad control, hover and cruise
 starts, stabilization/altitude/return-home modes, wind and autopilot targets,
 battery and force telemetry, and a safe waypoint behavior language. See
 [docs/FLIGHT_SIMULATOR.md](docs/FLIGHT_SIMULATOR.md) for controls, commands, and
