@@ -357,7 +357,9 @@ export function FlightLab(props: FlightLabProps) {
       zeroLiftAngleRad: (-2 * Math.PI) / 180,
       maximumLiftCoefficient: 1.35,
       minimumLiftCoefficient: -1.35,
-      zeroLiftDragCoefficient: 0.034 + props.analysisOptions.additionalDragCounts / 10_000,
+      zeroLiftDragCoefficient:
+        props.analysis.zeroLiftGeometryDrag.totalBaseCoefficient +
+        props.analysisOptions.additionalDragCounts / 10_000,
       inducedDragFactor: 1 / (Math.PI * 0.82 * aspectRatio),
       sideForceSlopePerRad: -0.8,
       maximumTotalThrustN,

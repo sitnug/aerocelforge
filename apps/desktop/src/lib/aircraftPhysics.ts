@@ -66,6 +66,17 @@ export interface DerivedAircraftPhysics {
   readonly fallbackPanelCount: number;
 }
 
+export interface GeometryDragEstimate {
+  readonly referenceAreaM2: number;
+  readonly projectedFrontalAreaM2: number;
+  readonly wettedPanelAreaM2: number;
+  readonly surfaceProfileCoefficient: number;
+  readonly pressureCoefficient: number;
+  readonly skinFrictionCoefficient: number;
+  readonly totalBaseCoefficient: number;
+  readonly equivalentDragAreaM2: number;
+}
+
 const LIFTING_TYPES = new Set<ComponentType>([
   "wing",
   "horizontal_stabilizer",
@@ -321,7 +332,6 @@ function meshPanels(
     (minimum[1] + maximum[1]) / 2,
     (minimum[2] + maximum[2]) / 2
   ];
-  const stride = Math.max(1, Math.ceil(mesh.faces.length / maximumPanels));
   const pressureCoefficient = Math.max(
     0,
     finiteProperty(component, "aeroPressureCoefficient", 0.9)
@@ -330,55 +340,75 @@ function meshPanels(
     0,
     finiteProperty(component, "aeroSkinFrictionCoefficient", 0.005)
   );
-  const panels: AerodynamicPanel[] = [];
-  for (let start = 0; start < mesh.faces.length; start += stride) {
-    let groupAreaM2 = 0;
-    let weightedPosition: FlightVector = [0, 0, 0];
-    let representativeNormal: FlightVector | null = null;
-    const end = Math.min(mesh.faces.length, start + stride);
-    for (let index = start; index < end; index += 1) {
-      const face = mesh.faces[index];
-      if (face === undefined) continue;
-      const a = mesh.vertices[face[0]];
-      const b = mesh.vertices[face[1]];
-      const c = mesh.vertices[face[2]];
-      if (a === undefined || b === undefined || c === undefined) continue;
-      const scaledA = scaledLocalPoint(component, a);
-      const scaledB = scaledLocalPoint(component, b);
-      const scaledC = scaledLocalPoint(component, c);
-      const cross = cross3(subtract3(scaledB, scaledA), subtract3(scaledC, scaledA));
-      const triangleAreaM2 = magnitude3(cross) / 2;
-      if (triangleAreaM2 <= 1e-12) continue;
-      const centroid: FlightVector = [
-        (scaledA[0] + scaledB[0] + scaledC[0]) / 3,
-        (scaledA[1] + scaledB[1] + scaledC[1]) / 3,
-        (scaledA[2] + scaledB[2] + scaledC[2]) / 3
-      ];
-      representativeNormal ??= normalize3(cross);
-      weightedPosition = add(weightedPosition, scale3(centroid, triangleAreaM2));
-      groupAreaM2 += triangleAreaM2;
-    }
-    if (groupAreaM2 <= 1e-12 || representativeNormal === null) continue;
-    const localPosition = scale3(weightedPosition, 1 / groupAreaM2);
-    const outwardNormal =
-      dot3(representativeNormal, subtract3(localPosition, meshCenter)) < 0
-        ? scale3(representativeNormal, -1)
-        : representativeNormal;
-    panels.push({
-      componentId: component.id,
-      name: component.name,
-      positionBodyM: add(
-        component.transform.translationM,
-        rotateEuler(localPosition, component.transform.rotationRad)
-      ),
-      normalBody: rotateEuler(outwardNormal, component.transform.rotationRad),
-      areaM2: groupAreaM2,
-      pressureCoefficient,
-      skinFrictionCoefficient,
-      source: "mesh"
-    });
+  interface PanelBin {
+    areaM2: number;
+    weightedPosition: FlightVector;
+    weightedNormal: FlightVector;
   }
-  return panels;
+  const elevationBins = Math.max(2, Math.floor(Math.sqrt(maximumPanels / 2)));
+  const azimuthBins = Math.max(1, Math.floor(maximumPanels / elevationBins));
+  const bins = new Map<string, PanelBin>();
+  for (const face of mesh.faces) {
+    const a = mesh.vertices[face[0]];
+    const b = mesh.vertices[face[1]];
+    const c = mesh.vertices[face[2]];
+    if (a === undefined || b === undefined || c === undefined) continue;
+    const scaledA = scaledLocalPoint(component, a);
+    const scaledB = scaledLocalPoint(component, b);
+    const scaledC = scaledLocalPoint(component, c);
+    const cross = cross3(subtract3(scaledB, scaledA), subtract3(scaledC, scaledA));
+    const triangleAreaM2 = magnitude3(cross) / 2;
+    if (triangleAreaM2 <= 1e-12) continue;
+    const centroid: FlightVector = [
+      (scaledA[0] + scaledB[0] + scaledC[0]) / 3,
+      (scaledA[1] + scaledB[1] + scaledC[1]) / 3,
+      (scaledA[2] + scaledB[2] + scaledC[2]) / 3
+    ];
+    const rawNormal = normalize3(cross);
+    const outwardNormal =
+      dot3(rawNormal, subtract3(centroid, meshCenter)) < 0 ? scale3(rawNormal, -1) : rawNormal;
+    const azimuth = Math.atan2(outwardNormal[1], outwardNormal[0]);
+    const elevation = Math.asin(Math.max(-1, Math.min(1, outwardNormal[2])));
+    const azimuthIndex = Math.min(
+      azimuthBins - 1,
+      Math.floor(((azimuth + Math.PI) / (2 * Math.PI)) * azimuthBins)
+    );
+    const elevationIndex = Math.min(
+      elevationBins - 1,
+      Math.floor(((elevation + Math.PI / 2) / Math.PI) * elevationBins)
+    );
+    const key = `${azimuthIndex}:${elevationIndex}`;
+    const bin = bins.get(key) ?? {
+      areaM2: 0,
+      weightedPosition: [0, 0, 0],
+      weightedNormal: [0, 0, 0]
+    };
+    bin.areaM2 += triangleAreaM2;
+    bin.weightedPosition = add(bin.weightedPosition, scale3(centroid, triangleAreaM2));
+    bin.weightedNormal = add(bin.weightedNormal, scale3(outwardNormal, triangleAreaM2));
+    bins.set(key, bin);
+  }
+
+  return [...bins.values()].flatMap((bin): AerodynamicPanel[] => {
+    if (bin.areaM2 <= 1e-12 || magnitude3(bin.weightedNormal) <= 1e-12) return [];
+    const localPosition = scale3(bin.weightedPosition, 1 / bin.areaM2);
+    const outwardNormal = normalize3(bin.weightedNormal);
+    return [
+      {
+        componentId: component.id,
+        name: component.name,
+        positionBodyM: add(
+          component.transform.translationM,
+          rotateEuler(localPosition, component.transform.rotationRad)
+        ),
+        normalBody: rotateEuler(outwardNormal, component.transform.rotationRad),
+        areaM2: bin.areaM2,
+        pressureCoefficient,
+        skinFrictionCoefficient,
+        source: "mesh"
+      }
+    ];
+  });
 }
 
 export function deriveAircraftPhysics(
@@ -475,4 +505,54 @@ export function vectorProjectionArea(panel: AerodynamicPanel, velocityBodyMS: Ve
   const speed = magnitude3(velocityBodyMS);
   if (speed <= 1e-9) return 0;
   return panel.areaM2 * Math.abs(dot3(panel.normalBody, scale3(velocityBodyMS, 1 / speed)));
+}
+
+export function estimateGeometryDrag(
+  physics: Pick<DerivedAircraftPhysics, "surfaces" | "panels">,
+  referenceAreaM2: number,
+  flowDirectionBody: Vector3
+): GeometryDragEstimate {
+  if (!Number.isFinite(referenceAreaM2) || referenceAreaM2 <= 0) {
+    throw new Error("Drag reference area must be positive");
+  }
+  const flowSpeed = magnitude3(flowDirectionBody);
+  if (flowSpeed <= 1e-9) throw new Error("Drag flow direction must be non-zero");
+  const direction = scale3(flowDirectionBody, 1 / flowSpeed);
+  let projectedFrontalAreaM2 = 0;
+  let wettedPanelAreaM2 = 0;
+  let surfaceProfileDragAreaM2 = 0;
+  let pressureDragAreaM2 = 0;
+  let skinFrictionDragAreaM2 = 0;
+
+  for (const surface of physics.surfaces) {
+    surfaceProfileDragAreaM2 += surface.areaM2 * surface.baseDragCoefficient;
+    const normal = normalize3(cross3(surface.chordDirectionBody, surface.spanDirectionBody));
+    projectedFrontalAreaM2 += surface.areaM2 * Math.abs(dot3(normal, direction));
+  }
+
+  for (const panel of physics.panels) {
+    const alignment = dot3(direction, panel.normalBody);
+    const windwardAlignment = Math.max(0, alignment);
+    projectedFrontalAreaM2 += panel.areaM2 * windwardAlignment;
+    wettedPanelAreaM2 += panel.areaM2;
+    pressureDragAreaM2 += panel.areaM2 * panel.pressureCoefficient * windwardAlignment ** 3;
+    skinFrictionDragAreaM2 +=
+      panel.areaM2 * panel.skinFrictionCoefficient * (1 - Math.abs(alignment)) ** 2;
+  }
+
+  const surfaceProfileCoefficient = surfaceProfileDragAreaM2 / referenceAreaM2;
+  const pressureCoefficient = pressureDragAreaM2 / referenceAreaM2;
+  const skinFrictionCoefficient = skinFrictionDragAreaM2 / referenceAreaM2;
+  const totalBaseCoefficient =
+    surfaceProfileCoefficient + pressureCoefficient + skinFrictionCoefficient;
+  return {
+    referenceAreaM2,
+    projectedFrontalAreaM2,
+    wettedPanelAreaM2,
+    surfaceProfileCoefficient,
+    pressureCoefficient,
+    skinFrictionCoefficient,
+    totalBaseCoefficient,
+    equivalentDragAreaM2: totalBaseCoefficient * referenceAreaM2
+  };
 }

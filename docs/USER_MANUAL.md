@@ -76,11 +76,14 @@ glide envelope are derived from the current example inputs and can be exported a
 CSV. A1 is useful for concept trades, not separated-flow or propeller/airframe
 interaction validation.
 
-The drag ledger separates aggregate zero-lift drag, induced drag, configured
-sideslip drag, and explicit user-added drag. Use **Added real-world drag** in drag
-counts only when supported by measurement or a documented engineering method.
-Imported shape does not automatically determine skin-friction, form,
-interference, trim, cooling, or wave drag. See
+The drag ledger separates surface profile drag, body/mesh pressure drag, panel
+skin friction, induced drag, and explicit user-added drag. It also states the
+wing reference area and equivalent drag area (`CdA`), because a coefficient
+quoted using frontal area is not directly comparable. Use **Added real-world
+drag** in drag counts only when supported by measurement or a documented
+engineering method. Imported shape supplies an approximate panel buildup, but it
+does not validate interference, transition, roughness, trim, cooling, or wave
+drag. See
 [AERODYNAMICS_MODEL.md](AERODYNAMICS_MODEL.md) for equations and the required
 calibration workflow.
 

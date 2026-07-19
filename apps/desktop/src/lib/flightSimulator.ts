@@ -641,9 +641,6 @@ export function aerodynamicAndPropulsiveLoads(
   let momentBodyNm: [number, number, number] = [0, 0, 0];
   let liftN = 0;
   let dragN = 0;
-  let weightedLiftCoefficient = 0;
-  let weightedDragCoefficient = 0;
-  let coefficientAreaM2 = 0;
   const surfaceLoads: SurfaceLoadDiagnostic[] = [];
 
   for (const surface of model.surfaces) {
@@ -685,9 +682,6 @@ export function aerodynamicAndPropulsiveLoads(
     const lateralForce = Math.abs(surfaceForce[1]);
     liftN += upwardLift;
     dragN += Math.max(0, -dot3(surfaceForce, localDirection));
-    weightedLiftCoefficient += liftCoefficient * surface.areaM2;
-    weightedDragCoefficient += dragCoefficient * surface.areaM2;
-    coefficientAreaM2 += surface.areaM2;
     surfaceLoads.push({
       componentId: surface.componentId,
       name: surface.name,
@@ -778,8 +772,10 @@ export function aerodynamicAndPropulsiveLoads(
   }
   powerW = Math.min(powerW, model.maximumPowerW);
 
-  const liftCoefficient = coefficientAreaM2 > 0 ? weightedLiftCoefficient / coefficientAreaM2 : 0;
-  const dragCoefficient = coefficientAreaM2 > 0 ? weightedDragCoefficient / coefficientAreaM2 : 0;
+  const referenceForceN =
+    0.5 * model.densityKgM3 * airspeedMS ** 2 * Math.max(model.wingAreaM2, 1e-9);
+  const liftCoefficient = referenceForceN > 1e-9 ? liftN / referenceForceN : 0;
+  const dragCoefficient = referenceForceN > 1e-9 ? dragN / referenceForceN : 0;
   return {
     forceBodyN,
     momentBodyNm,

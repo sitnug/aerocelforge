@@ -723,8 +723,8 @@ export default function App() {
     }
   }, [deleteRequestId, project]);
   const analysis = useMemo(
-    () => runRapidAnalysis(project, analysisOptions),
-    [project, analysisOptions]
+    () => runRapidAnalysis(project, analysisOptions, geometryAssets),
+    [project, analysisOptions, geometryAssets]
   );
 
   useEffect(() => {

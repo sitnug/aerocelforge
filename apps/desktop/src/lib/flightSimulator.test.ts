@@ -365,6 +365,8 @@ describe("interactive flight physics", () => {
       [0, 0, 0]
     );
     expect(large.diagnostics.dragN).toBeCloseTo(small.diagnostics.dragN * 2, 10);
+    expect(small.diagnostics.dragCoefficient).toBeCloseTo(0.5 / model.wingAreaM2, 10);
+    expect(large.diagnostics.dragCoefficient).toBeCloseTo(1 / model.wingAreaM2, 10);
     expect(Math.abs(small.momentBodyNm[2])).toBeGreaterThan(0);
   });
 

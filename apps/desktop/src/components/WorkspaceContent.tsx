@@ -112,7 +112,8 @@ const METRIC_HELP: Readonly<Record<string, string>> = {
   "SHAFT POWER": "Mechanical power delivered by the motor to the propeller.",
   "BUS VOLTAGE": "The battery voltage available to the motors while they are drawing power.",
   "LIFT COEFFICIENT": "A unit-free number that describes how strongly the wing makes lift.",
-  "DRAG COEFFICIENT": "A unit-free number that describes how strongly air slows the aircraft.",
+  "DRAG COEFFICIENT":
+    "Total drag divided by air pressure and the listed wing reference area. A value from a table may differ if that table uses frontal area instead.",
   "LIFT / DRAG": "Lift divided by drag. A higher number usually means a more efficient glide.",
   "BEST GLIDE":
     "The speed and condition where the estimate gives the greatest distance per metre of height lost.",
@@ -1452,8 +1453,10 @@ function AeroWorkspace(props: WorkspaceContentProps) {
         <MetricCard
           label="DRAG COEFFICIENT"
           value={props.analysis.designPoint.coefficients.cd.toFixed(4)}
-          detail={`${props.analysis.designPoint.forcesN.drag.toFixed(1)} N total drag`}
-          provenance="A1 preliminary estimate"
+          detail={`${props.analysis.designPoint.forcesN.drag.toFixed(1)} N · CdA ${(
+            props.analysis.designPoint.coefficients.cd * props.project.vehicle.reference.areaM2
+          ).toFixed(3)} m²`}
+          provenance={`Wing-area reference · ${props.project.vehicle.reference.areaM2.toFixed(3)} m²`}
         />
         <MetricCard
           label="LIFT / DRAG"
@@ -1478,24 +1481,36 @@ function AeroWorkspace(props: WorkspaceContentProps) {
             <small>DRAG ACCOUNTING</small>
             <h2>What the A1 total contains</h2>
           </span>
-          <Badge tone="warning">Aggregate input + induced</Badge>
+          <Badge tone="warning">Geometry panels + induced</Badge>
         </div>
         <div className="detail-grid aero-drag-grid">
           <span>
-            <small>ZERO-LIFT AGGREGATE</small>
-            <strong>{props.analysis.designPoint.dragBreakdown.zeroLift.toFixed(5)}</strong>
+            <small>SURFACE PROFILE</small>
+            <strong>{props.analysis.geometryDrag.surfaceProfileCoefficient.toFixed(5)}</strong>
+          </span>
+          <span>
+            <small>BODY / MESH PRESSURE</small>
+            <strong>{props.analysis.geometryDrag.pressureCoefficient.toFixed(5)}</strong>
+          </span>
+          <span>
+            <small>SKIN FRICTION</small>
+            <strong>{props.analysis.geometryDrag.skinFrictionCoefficient.toFixed(5)}</strong>
           </span>
           <span>
             <small>INDUCED</small>
             <strong>{props.analysis.designPoint.dragBreakdown.induced.toFixed(5)}</strong>
           </span>
           <span>
-            <small>SIDESLIP INCREMENT</small>
-            <strong>{props.analysis.designPoint.dragBreakdown.sideslip.toFixed(5)}</strong>
-          </span>
-          <span>
             <small>USER-ADDED</small>
             <strong>{props.analysis.designPoint.dragBreakdown.additional.toFixed(5)}</strong>
+          </span>
+          <span>
+            <small>PROJECTED FRONT AREA</small>
+            <strong>{props.analysis.geometryDrag.projectedFrontalAreaM2.toFixed(4)} m²</strong>
+          </span>
+          <span>
+            <small>PANEL WETTED AREA</small>
+            <strong>{props.analysis.geometryDrag.wettedPanelAreaM2.toFixed(3)} m²</strong>
           </span>
           <span>
             <small>TOTAL CD</small>
@@ -1503,11 +1518,54 @@ function AeroWorkspace(props: WorkspaceContentProps) {
           </span>
         </div>
         <p className="card-copy">
-          Zero-lift CD is an illustrative aggregate input. It does not independently resolve
-          wetted-area skin friction, form/interference, cooling, landing-gear, trim, surface
-          roughness, or wave drag. Add measured or justified drag counts above; use a calibrated
-          parasite-drag or CFD workflow for geometry-derived values.
+          This CD uses the aircraft wing reference area of{" "}
+          {props.project.vehicle.reference.areaM2.toFixed(3)} m². It now includes pressure and skin
+          drag from each available mesh or fallback body panel, profile drag from each lifting
+          surface, and induced drag. A CD from a table that uses frontal area is not directly
+          comparable. Interference, cooling flow, roughness, and separation still need CFD or
+          measured data.
         </p>
+        {props.advancedMode && (
+          <div className="aero-reference-editor">
+            <span>
+              <strong className="heading-with-help">
+                Wing reference area
+                <InfoTip label="Wing reference area">
+                  CD changes when its reference area changes even if the physical drag force stays
+                  the same. Enter the real projected main-wing area for this aircraft.
+                </InfoTip>
+              </strong>
+              <small>Use the same area when comparing this CD with another source.</small>
+            </span>
+            <label>
+              <input
+                type="number"
+                min="0.001"
+                max="10000"
+                step="0.01"
+                value={props.project.vehicle.reference.areaM2}
+                aria-label="Wing reference area in square metres"
+                onChange={(event) => {
+                  const areaM2 = Number(event.target.value);
+                  if (!Number.isFinite(areaM2) || areaM2 <= 0) return;
+                  props.setProject((current) => ({
+                    ...current,
+                    updatedAt: new Date().toISOString(),
+                    vehicle: {
+                      ...current.vehicle,
+                      reference: {
+                        ...current.vehicle.reference,
+                        areaM2,
+                        chordM: areaM2 / current.vehicle.reference.spanM
+                      }
+                    }
+                  }));
+                }}
+              />
+              <span>m²</span>
+            </label>
+          </div>
+        )}
       </section>
       {props.analysis.designPoint.warnings.length > 0 && (
         <Notice tone="warning" title="Current-point model warnings">
@@ -1526,7 +1584,7 @@ function AeroWorkspace(props: WorkspaceContentProps) {
         />
         <EngineeringPlot
           title="Drag polar"
-          subtitle="Aggregate zero-lift, induced, and explicit added drag; terms are listed above"
+          subtitle="Geometry pressure, skin friction, surface profile, induced, and added drag"
           xLabel="CD (—)"
           yLabel="CL (—)"
           data={props.analysis.polar.map((point) => ({ x: point.cd, y: point.cl }))}

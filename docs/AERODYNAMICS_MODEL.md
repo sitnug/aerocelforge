@@ -1,9 +1,10 @@
 # Aerodynamics model and real-world validity
 
 Aerocel Forge separates equation correctness from aircraft accuracy. The built-in
-A1 model is a deterministic attached-flow, parabolic-polar estimate. It is useful
-for preliminary comparisons, but it is not a substitute for airfoil data,
-VLM/panel analysis, CFD, a wind tunnel, or flight-test identification.
+A1 model is a deterministic geometry-aware, attached-flow, parabolic-polar
+estimate. It is useful for preliminary comparisons, but it is not a substitute
+for airfoil data, VLM/panel analysis, CFD, a wind tunnel, or flight-test
+identification.
 
 The interactive Fly workspace has a separate local-flow model. It applies lift,
 drag, and pressure forces to individual parts at their actual position relative
@@ -33,25 +34,31 @@ a       = a0 / (1 + a0 / (pi e AR))
 CL      = clamp[a (alpha - alpha_0), CL_min, CL_max]
 CD_i    = CL^2 / (pi e AR)
 CD_beta = K_beta beta^2
-CD      = CD_0 + CD_i + CD_beta + CD_add
+CD_base = CD_profile + CD_pressure + CD_skin
+CD      = CD_base + CD_i + CD_beta + CD_add
 L       = q S CL
 D       = q S CD
 Re      = rho V c / mu
 M       = V / a_sound
 ```
 
-The UI displays every drag term rather than only the total. `CD_0` is an
-illustrative aggregate input for zero-lift parasite drag. `CD_add` is an explicit
-user-controlled increment in drag counts (`1 count = 0.0001 CD`) for measured or
-justified excrescence, cooling, landing-gear, trim, roughness, or other effects.
+The UI displays every drag term rather than only the total. A1 derives its base
+drag from each enabled part. Lifting surfaces contribute their individual
+profile-drag coefficient and actual area. Imported meshes contribute sampled
+triangle normals and areas; procedural bodies use oriented bounding-box panels.
+Windward pressure and tangential skin-friction forces are reduced to `CD` using
+the project wing reference area. `CD_add` is an explicit user-controlled
+increment in drag counts (`1 count = 0.0001 CD`) for measured or justified
+excrescence, cooling, landing-gear, trim, roughness, or other effects.
 
 ## What A1 does not derive
 
-A1 does not independently calculate wetted-area skin friction, component form
-factors, interference factors, transition location, surface roughness, cooling
-flow, landing-gear drag, trim drag, wave drag, separated flow, dynamic stall,
-rotor-wake interaction, or ground effect. Imported mesh shape contributes face
-area, direction, pressure drag, and local moment in Fly, but it does not
+A1 estimates wetted-panel skin friction and windward form pressure, but it does
+not solve a boundary layer or independently calculate transition location,
+Reynolds-dependent roughness, component interference, cooling flow, landing-gear
+drag, trim drag, wave drag, separated flow, dynamic stall, rotor-wake
+interaction, or ground effect. Imported mesh shape contributes face area,
+direction, pressure drag, and local moment in both A1 and Fly, but it does not
 automatically become a validated aerodynamic database. Those effects require
 geometry and flow-specific evidence.
 
@@ -76,6 +83,9 @@ Automated tests check:
 - the finite-wing slope is below the two-dimensional section slope;
 - induced drag increases with lift squared;
 - every drag contribution sums exactly to total `CD`;
+- blunt-body pressure drag exceeds slender-body pressure drag for the same
+  reference area;
+- imported body-panel drag force is included in the reported Fly `CD`;
 - added drag counts propagate through design-point, trim, glide, transition, and
   optimization calculations;
 - positive and negative stall margins use the nearest configured boundary;
@@ -89,8 +99,9 @@ These are software and equation checks, not validation of the Kestrel example.
 
 For a real aircraft:
 
-1. Replace illustrative reference area, span, chord, mass, atmosphere, `CD_0`,
-   lift slope, stall limits, and span efficiency with traceable inputs.
+1. Replace illustrative reference area, span, chord, mass, atmosphere, panel
+   pressure/skin coefficients, lift slope, stall limits, and span efficiency
+   with traceable inputs.
 2. Build parasite drag from measured wetted areas and justified skin-friction,
    form, interference, and excrescence methods, or import a validated polar.
 3. Match Reynolds and Mach number to the intended operating point.

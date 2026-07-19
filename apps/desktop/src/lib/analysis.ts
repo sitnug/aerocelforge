@@ -10,7 +10,11 @@ import {
   solveStraightLevelTrim,
   type TransitionResult
 } from "@aerocel/flight-dynamics";
-import { combineMassProperties, type CombinedMassProperties } from "@aerocel/geometry-core";
+import {
+  combineMassProperties,
+  type CombinedMassProperties,
+  type TriangleMesh
+} from "@aerocel/geometry-core";
 import { gridSearch, paretoFront, type DesignEvaluation } from "@aerocel/optimization";
 import {
   evaluateBattery,
@@ -21,11 +25,18 @@ import {
   type SlipstreamResult
 } from "@aerocel/propulsion-models";
 import type { AerocelProject } from "@aerocel/simulation-schema";
+import {
+  deriveAircraftPhysics,
+  estimateGeometryDrag,
+  type GeometryDragEstimate
+} from "./aircraftPhysics";
 import { configuredMotorThrustN } from "./componentProperties";
 
 export interface RapidAnalysis {
   readonly mass: CombinedMassProperties;
   readonly atmosphere: ReturnType<typeof isaAtmosphere>;
+  readonly geometryDrag: GeometryDragEstimate;
+  readonly zeroLiftGeometryDrag: GeometryDragEstimate;
   readonly designPoint: AnalyticalAeroResult;
   readonly polar: readonly {
     readonly alphaDeg: number;
@@ -69,7 +80,8 @@ const inputForAero = (
   project: AerocelProject,
   airspeedMS: number,
   angleOfAttackDeg: number,
-  additionalDragCounts: number
+  additionalDragCounts: number,
+  geometryBaseDragCoefficient: number
 ) => ({
   wingAreaM2: project.vehicle.reference.areaM2,
   wingSpanM: project.vehicle.reference.spanM,
@@ -81,13 +93,22 @@ const inputForAero = (
   zeroLiftAngleRad: (-2 * Math.PI) / 180,
   sectionLiftSlopePerRad: 2 * Math.PI,
   oswaldEfficiency: 0.82,
-  zeroLiftDragCoefficient: 0.034,
+  zeroLiftDragCoefficient: geometryBaseDragCoefficient,
   additionalDragCoefficient: additionalDragCounts / 10_000,
   pitchingMomentZero: 0.015,
   pitchingMomentSlopePerRad: -0.72,
   sideForceSlopePerRad: -0.8,
   stallAnglePositiveRad: (13 * Math.PI) / 180,
   maximumLiftCoefficient: 1.35
+});
+
+const withGeometryDragValidity = (result: AnalyticalAeroResult): AnalyticalAeroResult => ({
+  ...result,
+  validity: result.validity.map((item) =>
+    item.startsWith("Zero-lift drag is an aggregate input")
+      ? "Base drag is geometry-derived from profile and body panels; it is not calibrated CFD or wind-tunnel data"
+      : item
+  )
 });
 
 function solvePropeller(
@@ -149,11 +170,27 @@ function solvePropeller(
   });
 }
 
-export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptions): RapidAnalysis {
+export function runRapidAnalysis(
+  project: AerocelProject,
+  options: AnalysisOptions,
+  geometryAssets: ReadonlyMap<string, TriangleMesh> = new Map()
+): RapidAnalysis {
   if (options.additionalDragCounts < 0 || !Number.isFinite(options.additionalDragCounts)) {
     throw new Error("Additional drag counts must be a finite non-negative value");
   }
-  const aggregateZeroLiftDragCoefficient = 0.034 + options.additionalDragCounts / 10_000;
+  const aircraftPhysics = deriveAircraftPhysics(project, geometryAssets, new Map(), 2 * Math.PI);
+  const dragAtAngle = (angleDeg: number): GeometryDragEstimate => {
+    const angleRad = (angleDeg * Math.PI) / 180;
+    return estimateGeometryDrag(aircraftPhysics, project.vehicle.reference.areaM2, [
+      Math.cos(angleRad),
+      0,
+      Math.sin(angleRad)
+    ]);
+  };
+  const zeroLiftGeometryDrag = dragAtAngle(0);
+  const geometryDrag = dragAtAngle(options.angleOfAttackDeg);
+  const aggregateZeroLiftDragCoefficient =
+    zeroLiftGeometryDrag.totalBaseCoefficient + options.additionalDragCounts / 10_000;
   const masses = project.vehicle.components.flatMap((component) =>
     component.mass === null
       ? []
@@ -176,17 +213,26 @@ export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptio
     project.environment.altitudeM,
     project.environment.temperatureK ?? undefined
   );
-  const designPoint = analyzeComponentBuildup(
-    inputForAero(
-      project,
-      options.airspeedMS,
-      options.angleOfAttackDeg,
-      options.additionalDragCounts
+  const designPoint = withGeometryDragValidity(
+    analyzeComponentBuildup(
+      inputForAero(
+        project,
+        options.airspeedMS,
+        options.angleOfAttackDeg,
+        options.additionalDragCounts,
+        geometryDrag.totalBaseCoefficient
+      )
     )
   );
   const polar = Array.from({ length: 23 }, (_, index) => -8 + index).map((alphaDeg) => {
     const result = analyzeComponentBuildup(
-      inputForAero(project, options.airspeedMS, alphaDeg, options.additionalDragCounts)
+      inputForAero(
+        project,
+        options.airspeedMS,
+        alphaDeg,
+        options.additionalDragCounts,
+        dragAtAngle(alphaDeg).totalBaseCoefficient
+      )
     );
     return {
       alphaDeg,
@@ -335,6 +381,8 @@ export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptio
   return {
     mass,
     atmosphere,
+    geometryDrag,
+    zeroLiftGeometryDrag,
     designPoint,
     polar,
     glide,

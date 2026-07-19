@@ -12,6 +12,11 @@ describe("Kestrel integrated engineering analysis", () => {
     expect(result.optimization).toHaveLength(42);
     expect(result.designPoint.fidelity).toBe("A1_parabolic_polar");
     expect(result.transition.quality).toBe("preliminary");
+    expect(result.designPoint.dragBreakdown.zeroLift).toBeCloseTo(
+      result.geometryDrag.totalBaseCoefficient,
+      12
+    );
+    expect(result.geometryDrag.equivalentDragAreaM2).toBeGreaterThan(0);
   });
 
   it("propagates explicit drag counts through design point, glide, trim, and transition", () => {

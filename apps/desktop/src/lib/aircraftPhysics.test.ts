@@ -1,6 +1,6 @@
 import type { TriangleMesh } from "@aerocel/geometry-core";
 import { describe, expect, it } from "vitest";
-import { deriveAircraftPhysics } from "./aircraftPhysics";
+import { deriveAircraftPhysics, estimateGeometryDrag } from "./aircraftPhysics";
 import { kestrelProject } from "./kestrel";
 
 const thrustByUnit = new Map(
@@ -100,6 +100,54 @@ describe("per-part aircraft physics", () => {
     expect(panel?.normalBody).toEqual([1, 0, 0]);
   });
 
+  it("keeps opposing imported-mesh faces in separate pressure directions", () => {
+    const sha = "b".repeat(64);
+    const fuselage = kestrelProject.vehicle.components.find(
+      (component) => component.type === "fuselage"
+    );
+    expect(fuselage).toBeDefined();
+    if (fuselage === undefined) return;
+    const mesh: TriangleMesh = {
+      vertices: [
+        [0.5, 0, 0],
+        [0.5, 1, 0],
+        [0.5, 0, 1],
+        [-0.5, 0, 0],
+        [-0.5, 0, 1],
+        [-0.5, 1, 0]
+      ],
+      faces: [
+        [0, 1, 2],
+        [3, 4, 5]
+      ]
+    };
+    const project = {
+      ...kestrelProject,
+      vehicle: {
+        ...kestrelProject.vehicle,
+        components: kestrelProject.vehicle.components.map((component) =>
+          component.id === fuselage.id
+            ? {
+                ...component,
+                geometry: {
+                  ...component.geometry,
+                  kind: "mesh" as const,
+                  sourceSha256: sha
+                }
+              }
+            : component
+        )
+      }
+    };
+    const physics = deriveAircraftPhysics(project, new Map([[sha, mesh]]), thrustByUnit, 4.7);
+    const meshPanels = physics.panels.filter((panel) => panel.componentId === fuselage.id);
+    const drag = estimateGeometryDrag({ surfaces: [], panels: meshPanels }, 1, [1, 0, 0]);
+
+    expect(meshPanels).toHaveLength(2);
+    expect(meshPanels.map((panel) => panel.normalBody[0]).sort()).toEqual([-1, 1]);
+    expect(drag.pressureCoefficient).toBeCloseTo(0.45, 12);
+  });
+
   it("keeps combined elevon and flaperon control roles", () => {
     const changed = {
       ...kestrelProject,
@@ -122,5 +170,40 @@ describe("per-part aircraft physics", () => {
     expect(result.surfaces.find((surface) => surface.name === "Starboard flap")?.control).toBe(
       "flaperon"
     );
+  });
+
+  it("derives much more pressure drag from a blunt body than a slender body", () => {
+    const fuselage = kestrelProject.vehicle.components.find(
+      (component) => component.type === "fuselage"
+    );
+    expect(fuselage).toBeDefined();
+    if (fuselage === undefined) return;
+    const physicsForSize = (boundingBoxM: readonly [number, number, number]) =>
+      deriveAircraftPhysics(
+        {
+          ...kestrelProject,
+          vehicle: {
+            ...kestrelProject.vehicle,
+            components: [
+              {
+                ...fuselage,
+                geometry: { ...fuselage.geometry, boundingBoxM: [...boundingBoxM] }
+              }
+            ],
+            joints: [],
+            propulsionUnits: []
+          }
+        },
+        new Map(),
+        new Map(),
+        4.7
+      );
+    const blunt = estimateGeometryDrag(physicsForSize([1, 1, 1]), 1, [1, 0, 0]);
+    const slender = estimateGeometryDrag(physicsForSize([10, 0.1, 0.1]), 1, [1, 0, 0]);
+
+    expect(blunt.pressureCoefficient).toBeCloseTo(0.82, 12);
+    expect(blunt.totalBaseCoefficient).toBeGreaterThan(0.8);
+    expect(slender.totalBaseCoefficient).toBeLessThan(0.05);
+    expect(blunt.totalBaseCoefficient).toBeGreaterThan(slender.totalBaseCoefficient * 15);
   });
 });
