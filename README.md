@@ -1,71 +1,170 @@
-# Aerocel Forge
+<div align="center">
+  <img src="apps/desktop/src-tauri/icon.svg" width="112" alt="Aerocel Forge logo">
+  <h1>Aerocel Forge</h1>
+  <p><strong>Design, inspect, test, and simulate aircraft and drones in one desktop app.</strong></p>
+  <p>
+    <a href="https://github.com/sitnug/aerocelforge/actions/workflows/ci.yml"><img src="https://github.com/sitnug/aerocelforge/actions/workflows/ci.yml/badge.svg" alt="Quality checks"></a>
+    <img src="https://img.shields.io/badge/version-1.0.0-087f67" alt="Version 1.0.0">
+    <img src="https://img.shields.io/badge/macOS-13%2B-087f67" alt="macOS 13 or later">
+  </p>
+</div>
 
-Aerocel Forge is a native engineering workspace for aircraft, UAV, eVTOL, and
-tilt-rotor concept development. It combines geometry inspection, mass
-properties, propulsion, rapid aerodynamics, nonlinear flight dynamics, VTOL
-transition studies, uncertainty, optimization, reporting, and capability-gated
-external solver workflows in one reproducible project format.
+Aerocel Forge is a beginner-friendly engineering workspace for aircraft, UAV,
+eVTOL, and tilt-rotor concepts. It combines 3D model import, part editing,
+weight and balance, motors and batteries, fast airflow estimates, interactive
+flight simulation, VTOL transition studies, route planning, and reports.
 
-The application is intentionally honest about model limits. Every result carries
-a source, fidelity level, input identity, quality grade, and warnings. External
-CFD or SITL jobs are never replaced by synthetic results when a solver is absent.
+It opens in **Simple** mode with plain words and small help popups. Experienced
+users can enable **Advanced** tools when they need more detail.
+
+> [!IMPORTANT]
+> Aerocel Forge is an engineering development aid, not flight-certified
+> software. Software checks do not replace measured component data, wind-tunnel
+> tests, hardware simulation, flight testing, or independent engineering review.
+
+## What you can do
+
+| Workspace      | What it does                                                                                   |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| **3D model**   | Import a part or a whole drone, inspect its size, move it, turn it, recolour it, or delete it. |
+| **Parts**      | See the full assembly, parent/child links, joints, and movable parts.                          |
+| **Weight**     | Calculate total mass, centre of gravity, and inertia from the current parts.                   |
+| **Power**      | Edit motors, propellers, batteries, thrust, power, current, KV, pitch, and blade count.        |
+| **Airflow**    | Run fast concept-level lift, drag, stability, span-load, and glide estimates.                  |
+| **Fly**        | Fly the current model with on-screen sticks, a gamepad, or the keyboard.                       |
+| **Transition** | Estimate hover-to-cruise behaviour, energy use, altitude change, and failure cases.            |
+| **Route**      | Set flight targets or write a small, bounded waypoint program.                                 |
+| **Results**    | Compare outputs, uncertainty, warnings, and quality grades.                                    |
+| **Reports**    | Export readable engineering summaries and CSV data.                                            |
+
+Other useful features include:
+
+- Bright and Cockpit themes with high-contrast controls.
+- Simple and Advanced modes.
+- A resizable window, application fullscreen, and simulator Focus mode.
+- Right-click editing and Delete/Backspace removal with relationship checks.
+- Saved project data with a versioned schema and SI units internally.
+- Honest capability gates for tools such as OpenFOAM, OpenVSP, PX4, and Gazebo.
 
 ## Quick start on macOS
 
-Requirements: macOS 13+, Node.js 22+, npm 10+, Rust 1.77.2+, and Python 3.9+.
-Xcode Command Line Tools are required for the native bundle.
+The currently tested packaged target is **macOS 13 or later on Apple Silicon**.
+A public build still needs Apple Developer ID signing and notarization, so the
+most reliable current setup is to run it from source.
+
+### Requirements
+
+- macOS 13+
+- Node.js 22+
+- npm 10+
+- Rust 1.77.2+
+- Python 3.9+
+- Xcode Command Line Tools (`xcode-select --install`)
+
+### Run the desktop app
 
 ```bash
+git clone https://github.com/sitnug/aerocelforge.git
+cd aerocelforge
 ./scripts/bootstrap-macos.sh
 npm run desktop
 ```
 
-For the browser-hosted development UI only:
+The included **Kestrel** example opens on first run. Its values are examples,
+not measurements from a real aircraft.
+
+### Run the browser preview
 
 ```bash
 npm run dev
 ```
 
-The Kestrel tri-tilt example opens from the first-run screen. Its dimensions and
-component values are explicitly marked as illustrative user-entered data. The
-app starts in **Simple** mode with the high-contrast **Bright** theme. Use the
-top-bar controls or **Settings** to choose the dark **Cockpit** theme or reveal
-specialist **Advanced** tools. These view choices do not change project data.
+Open <http://127.0.0.1:1420>. The browser preview is useful for UI work, but it
+uses browser storage instead of the native app's project-file storage.
 
-To add geometry, open **3D model** and choose **Import model**. Select a model
-type (or auto-detect), confirm source units, and choose whether the file is one
-complete part or a whole drone model. Then choose one file or drag it onto the
-drop zone. Every shape in a whole-model STL stays together as one selectable
-object. Locally supported triangle formats are inspected before they can be
-added; CAD and articulated assembly formats remain explicitly gated on their
-named external adapters.
+### Build the Mac installer
 
-Select a part and press **Delete** or **Backspace** to remove it after a safety
-check. Right-click a 3D part, navigator item, or Parts table row to edit or delete
-it. Deleting a parent also lists and removes its attached children, joints, and
-motor setup so saved projects never contain broken links.
+```bash
+npm run desktop:build
+```
 
-Clicking any part in the left navigator opens its property editor. Type-specific
-settings include motor thrust/power/current/KV, propeller diameter/pitch/blades,
-battery cells/capacity/current/charge, wing dimensions, body dimensions, part
-weight, visibility, and colour. Linked propulsion and battery records update with
-the part, and motor thrust limits feed the flight simulator.
+The app and DMG are written to:
 
-To fly the loaded vehicle, open **Fly**. The Flight Simulator provides
-an explicit **Controller / Keyboard** choice, on-screen Mode 2 sticks, standard
-gamepad control, hover and cruise
-starts, stabilization/altitude/return-home modes, wind and autopilot targets,
-battery and force telemetry, and a safe waypoint behavior language. See
-[docs/FLIGHT_SIMULATOR.md](docs/FLIGHT_SIMULATOR.md) for controls, commands, and
-the explicit physical-validation boundary.
+```text
+apps/desktop/src-tauri/target/release/bundle/
+```
 
-The application window is resizable and has an explicit fullscreen control in
-the title bar. In the Flight Lab, **View height** resizes the 3D stage and
-**Focus** fills the application with the simulator; Escape exits Focus mode.
-Small `i` controls beside unfamiliar sections and values open plain-language
-help with hover, keyboard focus, or click.
+See [MACOS_SETUP.md](MACOS_SETUP.md) for signing, packaging, and troubleshooting.
 
-## Verification
+## Import a 3D model
+
+Open **File → Import model** or use **Import model** in the 3D workspace. Choose:
+
+1. The file type, or **Auto-detect**.
+2. The units used by the source file.
+3. **One complete drone part** or **Whole drone model**.
+4. A file from the picker, or drag it onto the drop zone.
+
+Built-in import supports:
+
+| Format     | Current support                                 |
+| ---------- | ----------------------------------------------- |
+| STL        | ASCII and binary triangle models                |
+| OBJ        | Polygon models, including relative face indices |
+| glTF / GLB | Self-contained scene models                     |
+| PLY        | Common ASCII and binary triangle models         |
+| DAE        | Embedded COLLADA geometry                       |
+| DAT / CSV  | Airfoil or section inspection only              |
+
+STEP, IGES, 3MF, VSP3, URDF, SDF, and DXF need their named external adapter.
+Aerocel Forge shows them as unavailable instead of pretending an import worked.
+
+Click any part in the left sidebar to open its settings. Motor thrust, battery
+capacity, propeller size, wing dimensions, part weight, visibility, and colour
+are linked to the calculations that use them.
+
+## Fly the model
+
+Open **Fly**, choose **Controller** or **Keyboard**, select a flight mode, and
+press **Fly**.
+
+### Keyboard controls
+
+| Key   | Action            |
+| ----- | ----------------- |
+| W     | Pitch down        |
+| S     | Pitch up          |
+| A     | Bank left         |
+| D     | Bank right        |
+| Shift | Increase throttle |
+| Ctrl  | Decrease throttle |
+| Q / E | Change motor tilt |
+| Space | Fly or pause      |
+
+Controller mode accepts the two on-screen Mode 2 sticks or a standard gamepad.
+Only the selected input type controls the aircraft, so a connected gamepad does
+not overwrite keyboard input.
+
+See [docs/FLIGHT_SIMULATOR.md](docs/FLIGHT_SIMULATOR.md) for flight modes,
+waypoint commands, simulator physics, and known limits.
+
+## Engineering quality and limits
+
+Aerocel Forge records where results came from, which inputs created them, their
+fidelity level, quality grade, and warnings. Missing external solvers do not
+produce made-up CFD or SITL results.
+
+The built-in airflow and flight tools are useful for early design comparisons.
+They are not a calibrated digital twin. Real decisions require measured motor,
+propeller, battery, mass, inertia, aerodynamic, actuator, and sensor data.
+
+Read the current [production-readiness audit](PRODUCTION_READINESS.md),
+[validation record](VALIDATION.md), and
+[aerodynamics model notes](docs/AERODYNAMICS_MODEL.md) before relying on results.
+
+## Development
+
+### Main checks
 
 ```bash
 npm run check
@@ -75,32 +174,44 @@ npm run python:typecheck
 npm run rust:check
 npm run rust:clippy
 cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml
-npm run desktop:build
 ```
 
-## Repository map
+GitHub Actions runs the TypeScript, Python, and Rust checks for pushes and pull
+requests.
 
-- `apps/desktop`: React, Three.js, and Tauri 2 native application.
-- `packages`: strict TypeScript engineering and data-model libraries.
-- `services/scientific-orchestrator`: typed FastAPI process orchestrator.
-- `examples/kestrel`: complete tri-tilt concept project.
-- `solvers`: contracts and setup notes for external scientific tools.
-- `infrastructure`: local Linux and remote execution templates.
-- `docs`: user, developer, security, and adapter documentation.
+### Technology
 
-Start with [MACOS_SETUP.md](MACOS_SETUP.md), then read
-[docs/USER_MANUAL.md](docs/USER_MANUAL.md). The technical boundaries are in
-[ARCHITECTURE.md](ARCHITECTURE.md), and validation status is recorded in
-[VALIDATION.md](VALIDATION.md). The implementation-versus-qualification audit is
-in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
-The equations and real-world aerodynamic calibration boundary are documented in
-[docs/AERODYNAMICS_MODEL.md](docs/AERODYNAMICS_MODEL.md).
-Interactive flight controls and mission behavior are documented in
-[docs/FLIGHT_SIMULATOR.md](docs/FLIGHT_SIMULATOR.md).
+- React 19 and TypeScript 6
+- Three.js and React Three Fiber
+- Tauri 2 and Rust
+- FastAPI scientific-process orchestrator
+- Vitest, ESLint, Prettier, Ruff, mypy, Cargo test, and Clippy
 
-## Safety and scope
+### Repository map
 
-Aerocel Forge is an engineering analysis aid, not a certified design system.
-Outputs require independent review, suitable verification, and experimental
-validation before they influence fabrication or flight. It does not establish
-airworthiness or replace compliance with applicable aviation rules.
+```text
+apps/desktop/                    React + Three.js + Tauri desktop app
+packages/                        Engineering and data-model libraries
+services/scientific-orchestrator Typed FastAPI process orchestrator
+examples/kestrel/                Included tri-tilt example project
+solvers/                         External solver contracts and setup notes
+infrastructure/                  Local and remote solver templates
+docs/                            User and technical documentation
+```
+
+## Documentation
+
+- [User manual](docs/USER_MANUAL.md)
+- [Developer guide](docs/DEVELOPER_GUIDE.md)
+- [Architecture](ARCHITECTURE.md)
+- [Flight simulator](docs/FLIGHT_SIMULATOR.md)
+- [Aerodynamics model](docs/AERODYNAMICS_MODEL.md)
+- [Solver adapters](docs/SOLVER_ADAPTERS.md)
+- [Roadmap](ROADMAP.md)
+- [Security policy](SECURITY.md)
+- [Contributing](CONTRIBUTING.md)
+
+## License
+
+This repository does not currently include an open-source license. Until one is
+added, the code remains under the default copyright rules.
