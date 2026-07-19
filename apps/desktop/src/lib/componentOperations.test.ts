@@ -24,36 +24,16 @@ describe("component deletion", () => {
     expect(() => AerocelProjectSchema.parse(updated)).not.toThrow();
   });
 
-  it("will not delete the entire aircraft", () => {
+  it("can return a project to a valid empty file", () => {
     const fuselage = kestrelProject.vehicle.components.find(
       (component) => component.name === "Central fuselage"
     );
-    expect(() => planComponentDeletion(kestrelProject, fuselage?.id ?? "")).toThrow(
-      "at least one part"
-    );
-  });
+    const plan = planComponentDeletion(kestrelProject, fuselage?.id ?? "");
+    const updated = applyComponentDeletion(kestrelProject, plan);
 
-  it("will not delete the only parts that carry weight", () => {
-    const fuselage = kestrelProject.vehicle.components.find(
-      (component) => component.name === "Central fuselage"
-    );
-    const weightlessStandalonePart = {
-      ...kestrelProject.vehicle.components[0],
-      id: "10000000-0000-4000-8000-000000000001",
-      name: "Weightless imported shell",
-      parentId: null,
-      mass: null
-    };
-    const projectWithWeightlessRoot = AerocelProjectSchema.parse({
-      ...kestrelProject,
-      vehicle: {
-        ...kestrelProject.vehicle,
-        components: [...kestrelProject.vehicle.components, weightlessStandalonePart]
-      }
-    });
-
-    expect(() => planComponentDeletion(projectWithWeightlessRoot, fuselage?.id ?? "")).toThrow(
-      "leave the aircraft with no weight"
-    );
+    expect(updated.vehicle.components).toEqual([]);
+    expect(updated.vehicle.joints).toEqual([]);
+    expect(updated.vehicle.propulsionUnits).toEqual([]);
+    expect(() => AerocelProjectSchema.parse(updated)).not.toThrow();
   });
 });

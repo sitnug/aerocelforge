@@ -141,6 +141,13 @@ export function GeometryImportDialog({
   }, [format, open, selectedFile, units]);
 
   useEffect(() => {
+    if (open && project.vehicle.components.length === 0) {
+      setImportTarget("whole_drone");
+      setParentId("");
+    }
+  }, [open, project.vehicle.components.length]);
+
+  useEffect(() => {
     if (!open) return;
     const handleKey = (event: KeyboardEvent): void => {
       if (event.key === "Escape" && !processing && !committing) onClose();

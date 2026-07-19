@@ -77,7 +77,8 @@ interface WorkspaceContentProps {
   readonly onSelect: (id: string | null) => void;
   readonly onPartContextMenu: (id: string, clientX: number, clientY: number) => void;
   readonly onRequestPartDelete: (id: string) => void;
-  readonly analysis: RapidAnalysis;
+  readonly analysis: RapidAnalysis | null;
+  readonly analysisUnavailableReason: string | null;
   readonly analysisOptions: AnalysisOptions;
   readonly setAnalysisOptions: Dispatch<SetStateAction<AnalysisOptions>>;
   readonly viewportOptions: ViewportOptions;
@@ -97,6 +98,10 @@ interface WorkspaceContentProps {
   readonly setTheme: (theme: AppTheme) => void;
   readonly advancedMode: boolean;
   readonly setAdvancedMode: (enabled: boolean) => void;
+}
+
+interface CompleteWorkspaceContentProps extends WorkspaceContentProps {
+  readonly analysis: RapidAnalysis;
 }
 
 type Tone = "neutral" | "success" | "warning" | "danger" | "accent";
@@ -275,6 +280,18 @@ function downloadJson(fileName: string, value: unknown): void {
   URL.revokeObjectURL(url);
 }
 
+function safeProjectBaseName(project: AerocelProject): string {
+  return (
+    project.name
+      .normalize("NFKD")
+      .replaceAll(/[^\x20-\x7e]/gu, "")
+      .replaceAll(/[^a-zA-Z0-9_-]+/gu, "-")
+      .replaceAll(/-+/gu, "-")
+      .replaceAll(/^-|-$/gu, "")
+      .toLowerCase() || "aircraft"
+  );
+}
+
 function GeometryWorkspace(props: WorkspaceContentProps) {
   const selected = props.selectedComponent;
   const [nameEdit, setNameEdit] = useState<{
@@ -347,8 +364,11 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
     (unit) => unit.motorComponentId === selected?.id || unit.propellerComponentId === selected?.id
   );
   const selectedEstimatedThrustN =
-    props.analysis.propellers.find((item) => item.unitId === selectedPropulsionUnit?.id)?.result
-      .thrustN ?? props.analysis.propeller.thrustN;
+    props.analysis?.propellers.find((item) => item.unitId === selectedPropulsionUnit?.id)?.result
+      .thrustN ??
+    props.analysis?.propeller.thrustN ??
+    0;
+  const centerOfGravityM = props.analysis?.mass.centerOfGravityM ?? ([0, 0, 0] as const);
   return (
     <div className="geometry-workspace">
       <section className="viewport-panel">
@@ -433,21 +453,41 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             onSelect={props.onSelect}
             onPartContextMenu={props.onPartContextMenu}
             options={props.viewportOptions}
-            cgBodyM={props.analysis.mass.centerOfGravityM}
+            cgBodyM={centerOfGravityM}
             slipstreamRadiusM={0.16}
             geometryAssets={props.geometryAssets}
           />
+          {props.project.vehicle.components.length === 0 && (
+            <div className="empty-model-onboarding">
+              <span className="empty-model-onboarding__icon">
+                <Upload size={25} />
+              </span>
+              <small>EMPTY AIRCRAFT FILE</small>
+              <h2>Import your own aircraft</h2>
+              <p>This file contains no sample plane and no made-up parts.</p>
+              <button
+                type="button"
+                className="button button--primary"
+                onClick={props.onRequestGeometryImport}
+              >
+                <Upload size={15} /> Choose or drop a 3D model
+              </button>
+              <span>STL, OBJ, glTF, GLB, PLY and DAE</span>
+            </div>
+          )}
           <div className="viewport-frame-badge">
             <strong>{props.advancedMode ? "BODY · FRD" : "AIRCRAFT DIRECTIONS"}</strong>
             <span>Forward · right · down</span>
           </div>
-          <div className="viewport-quality">
-            <span className="quality-light quality-light--warning" />
-            <div>
-              <strong>Example geometry</strong>
-              <small>Built-in sample · not measured from a real aircraft</small>
+          {props.project.vehicle.components.length > 0 && (
+            <div className="viewport-quality">
+              <span className="quality-light quality-light--warning" />
+              <div>
+                <strong>Your imported geometry</strong>
+                <small>Check scale, part type and model health before calculating</small>
+              </div>
             </div>
-          </div>
+          )}
           <div className="view-cube" aria-hidden="true">
             <span>TOP</span>
             <strong>FRD</strong>
@@ -459,7 +499,9 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             <Eye size={13} /> 3D view
           </span>
           <span>
-            CG {props.analysis.mass.centerOfGravityM.map((value) => value.toFixed(3)).join(", ")} m
+            {props.analysis === null
+              ? "CG appears after part weight is added"
+              : `CG ${centerOfGravityM.map((value) => value.toFixed(3)).join(", ")} m`}
           </span>
           <span>Turn: drag · Zoom: scroll · Edit: right-click · Delete: select, then Delete</span>
         </div>
@@ -765,7 +807,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function HomeWorkspace(props: WorkspaceContentProps) {
+function HomeWorkspace(props: CompleteWorkspaceContentProps) {
   const assignedMass = props.project.vehicle.components.filter(
     (component) => component.mass !== null
   ).length;
@@ -858,14 +900,14 @@ function HomeWorkspace(props: WorkspaceContentProps) {
           value={props.analysis.mass.massKg.toFixed(2)}
           unit="kg"
           detail={`±${props.analysis.mass.rssMassUncertaintyKg.toFixed(2)} kg RSS input uncertainty`}
-          provenance="User-entered example"
+          provenance="User-entered value"
         />
         <MetricCard
           label="REFERENCE AREA"
           value={props.project.vehicle.reference.areaM2.toFixed(2)}
           unit="m²"
           detail={`${props.project.vehicle.reference.spanM.toFixed(2)} m span`}
-          provenance="User-entered example"
+          provenance="User-entered value"
         />
         <MetricCard
           label="BEST GLIDE"
@@ -895,7 +937,7 @@ function HomeWorkspace(props: WorkspaceContentProps) {
             <span>01</span>
             <Box size={18} />
             <strong>Geometry</strong>
-            <small>Procedural example assembled</small>
+            <small>Current imported assembly</small>
           </div>
           <ChevronRight size={16} />
           <div className="pipeline-step pipeline-step--done">
@@ -1061,7 +1103,7 @@ function ComponentsWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function MassWorkspace(props: WorkspaceContentProps) {
+function MassWorkspace(props: CompleteWorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
@@ -1182,8 +1224,7 @@ function MassWorkspace(props: WorkspaceContentProps) {
           </div>
           <p className="card-copy">
             Products of inertia retain their sign in the body FRD frame. Component rotations are not
-            yet applied to local tensors in this example configuration; review before control
-            design.
+            yet applied to local tensors in this configuration; review before control design.
           </p>
           <Notice tone="warning" title="Preliminary structural scope">
             Beam bending utilities are available for early load cases. No finite-element backend is
@@ -1195,7 +1236,7 @@ function MassWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function PropulsionWorkspace(props: WorkspaceContentProps) {
+function PropulsionWorkspace(props: CompleteWorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
@@ -1235,7 +1276,7 @@ function PropulsionWorkspace(props: WorkspaceContentProps) {
         <div className="control-readout">
           <small>INFLOW</small>
           <strong>{(props.analysisOptions.airspeedMS * 0.25).toFixed(1)} m/s</strong>
-          <span>Example assumption</span>
+          <span>Current assumption</span>
         </div>
       </div>
       <div className="metric-grid metric-grid--four">
@@ -1374,7 +1415,7 @@ function PropulsionWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function AeroWorkspace(props: WorkspaceContentProps) {
+function AeroWorkspace(props: CompleteWorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
@@ -1630,7 +1671,7 @@ function AeroWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function FlightWorkspace(props: WorkspaceContentProps) {
+function FlightWorkspace(props: CompleteWorkspaceContentProps) {
   return (
     <FlightLab
       project={props.project}
@@ -1647,7 +1688,7 @@ function FlightWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function TransitionWorkspace(props: WorkspaceContentProps) {
+function TransitionWorkspace(props: CompleteWorkspaceContentProps) {
   const result = props.analysis.transition;
   const failed = props.analysisOptions.failedMotorFraction > 0;
   const jammed = props.analysisOptions.jammedTiltDeg !== null;
@@ -1806,7 +1847,7 @@ function TransitionWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function CfdWorkspace(props: WorkspaceContentProps) {
+function CfdWorkspace(props: CompleteWorkspaceContentProps) {
   const [cfdAnalysis, setCfdAnalysis] = useState<"steady_rans" | "transient_urans">("steady_rans");
   const [turbulenceModel, setTurbulenceModel] = useState<"kOmegaSST" | "SpalartAllmaras">(
     "kOmegaSST"
@@ -1816,7 +1857,7 @@ function CfdWorkspace(props: WorkspaceContentProps) {
   );
   const caseInput = useMemo(
     () => ({
-      name: "kestrel-aoa4",
+      name: `${safeProjectBaseName(props.project)}-wind-case`,
       solver: "openfoam" as const,
       analysis: cfdAnalysis,
       airspeedMS: props.analysisOptions.airspeedMS,
@@ -1893,7 +1934,10 @@ function CfdWorkspace(props: WorkspaceContentProps) {
           <div className="section-card__header">
             <span>
               <small>CASE SETUP</small>
-              <h2>Kestrel · α {props.analysisOptions.angleOfAttackDeg.toFixed(1)}°</h2>
+              <h2>
+                {props.project.vehicle.name} · α {props.analysisOptions.angleOfAttackDeg.toFixed(1)}
+                °
+              </h2>
             </span>
             <Badge tone="warning">Heavy · 6M cell cap</Badge>
           </div>
@@ -1947,7 +1991,7 @@ function CfdWorkspace(props: WorkspaceContentProps) {
           </div>
           <h3 className="subsection-title">Domain extents</h3>
           <div className="domain-diagram">
-            <div className="domain-aircraft">Kestrel</div>
+            <div className="domain-aircraft">{props.project.vehicle.name}</div>
             <span className="domain-upstream">5L upstream</span>
             <span className="domain-downstream">12L downstream</span>
             <span className="domain-lateral">6L lateral</span>
@@ -1957,7 +2001,7 @@ function CfdWorkspace(props: WorkspaceContentProps) {
             type="button"
             className="button button--quiet"
             onClick={() => {
-              downloadJson("kestrel-openfoam-case.json", {
+              downloadJson(`${safeProjectBaseName(props.project)}-openfoam-case.json`, {
                 adapter: adapter.adapterVersion,
                 case: caseInput,
                 validationIssues,
@@ -1998,7 +2042,7 @@ function CfdWorkspace(props: WorkspaceContentProps) {
               <AlertTriangle size={15} />
               <div>
                 <strong>Surface source</strong>
-                <small>Procedural example, no healed CAD</small>
+                <small>Current imported geometry; no healed CAD result</small>
               </div>
             </span>
             <span className="gate-list--blocked">
@@ -2077,7 +2121,7 @@ function Px4Workspace(props: WorkspaceContentProps) {
   ];
   const issues = validatePx4Mapping({
     airframe: "custom",
-    modelName: "kestrel",
+    modelName: safeProjectBaseName(props.project),
     parameterFile: null,
     actuatorMappings: mappings,
     mavlinkUdpPort: 14560
@@ -2115,7 +2159,7 @@ function Px4Workspace(props: WorkspaceContentProps) {
           <div className="section-card__header">
             <span>
               <small>OUTPUT MAPPING</small>
-              <h2>Kestrel custom mixer</h2>
+              <h2>{props.project.vehicle.name} control mapping</h2>
             </span>
             <Badge tone={issues.length === 0 ? "success" : "danger"}>
               {issues.length === 0 ? "Mapping valid" : `${issues.length} issues`}
@@ -2160,7 +2204,11 @@ function Px4Workspace(props: WorkspaceContentProps) {
             type="button"
             className="button button--quiet"
             onClick={() =>
-              downloadJson("kestrel-px4-mapping.json", { model: "kestrel", port: 14560, mappings })
+              downloadJson(`${safeProjectBaseName(props.project)}-px4-mapping.json`, {
+                model: safeProjectBaseName(props.project),
+                port: 14560,
+                mappings
+              })
             }
           >
             <Download size={15} /> Export mapping
@@ -2218,7 +2266,7 @@ function Px4Workspace(props: WorkspaceContentProps) {
   );
 }
 
-function MissionWorkspace(props: WorkspaceContentProps) {
+function MissionWorkspace(props: CompleteWorkspaceContentProps) {
   const cruisePower = props.analysis.glide.bestGlide.powerRequiredW / 0.7 + 55;
   const enduranceMinutes = (props.analysis.battery.remainingEnergyWhApprox / cruisePower) * 60;
   return (
@@ -2354,7 +2402,7 @@ function MissionWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function OptimizationWorkspace(props: WorkspaceContentProps) {
+function OptimizationWorkspace(props: CompleteWorkspaceContentProps) {
   const curve = props.analysis.optimization.filter(
     (item) => Math.abs((item.parameters.batteryKg ?? 0) - 2.4) < 0.01
   );
@@ -2464,7 +2512,7 @@ function OptimizationWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function ResultsWorkspace(props: WorkspaceContentProps) {
+function ResultsWorkspace(props: CompleteWorkspaceContentProps) {
   const rows = [
     [
       "Takeoff mass",
@@ -2598,7 +2646,7 @@ function ResultsWorkspace(props: WorkspaceContentProps) {
             <span className="revision-list--active">
               <i />
               <strong>Baseline</strong>
-              <small>Current · example inputs</small>
+              <small>Current · user inputs</small>
             </span>
             <span>
               <i />
@@ -2617,7 +2665,7 @@ function ResultsWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function ValidationWorkspace(props: WorkspaceContentProps) {
+function ValidationWorkspace(props: CompleteWorkspaceContentProps) {
   const runtimeChecks = [
     {
       name: "Project schema and reference integrity",
@@ -2633,7 +2681,7 @@ function ValidationWorkspace(props: WorkspaceContentProps) {
     {
       name: "Mass aggregation",
       pass: Math.abs(props.analysis.mass.massKg - 8.42) < 1e-9,
-      detail: `${props.analysis.mass.massKg.toFixed(6)} kg expected example total`
+      detail: `${props.analysis.mass.massKg.toFixed(6)} kg calculated total`
     },
     {
       name: "Propeller induced-velocity convergence",
@@ -2761,7 +2809,7 @@ function ValidationWorkspace(props: WorkspaceContentProps) {
   );
 }
 
-function ReportsWorkspace(props: WorkspaceContentProps) {
+function ReportsWorkspace(props: CompleteWorkspaceContentProps) {
   const [exporting, setExporting] = useState(false);
   const exportReport = (): void => {
     setExporting(true);
@@ -2810,7 +2858,7 @@ function ReportsWorkspace(props: WorkspaceContentProps) {
             {
               name: "Propeller thrust",
               value: `${props.analysis.propeller.thrustN.toFixed(1)} N per unit`,
-              provenance: "Solver-derived from example blade inputs",
+              provenance: "Solver-derived from current blade inputs",
               fidelity: "P2 BEMT",
               quality: props.analysis.propeller.converged ? "Numerically converged" : "Unconverged",
               uncertainty: "Not quantified",
@@ -2826,7 +2874,10 @@ function ReportsWorkspace(props: WorkspaceContentProps) {
           ],
           warnings: ["No external solver result is included in this report."]
         });
-        const path = await writeReport("Kestrel-Baseline-Engineering-Report", html);
+        const path = await writeReport(
+          `${safeProjectBaseName(props.project)}-Engineering-Report`,
+          html
+        );
         props.notify(`Engineering report written: ${path}`);
       })
       .catch((error: unknown) =>
@@ -3371,39 +3422,120 @@ function SettingsWorkspace(props: WorkspaceContentProps) {
   );
 }
 
+function AnalysisSetupWorkspace(props: WorkspaceContentProps) {
+  const hasModel = props.project.vehicle.components.length > 0;
+  const hasMass = props.project.vehicle.components.some(
+    (component) => (component.mass?.valueKg ?? 0) > 0
+  );
+  const hasBattery = props.project.vehicle.batteries.length > 0;
+  return (
+    <div className="scroll-workspace setup-required-workspace">
+      <section className="setup-required-card">
+        <span className="setup-required-card__icon">
+          <CircleDashed size={28} />
+        </span>
+        <small>AIRCRAFT SETUP NEEDED</small>
+        <h1>Finish the real aircraft data first</h1>
+        <p>
+          {props.analysisUnavailableReason ??
+            "Aerocel Forge will not invent missing aircraft data or show fake results."}
+        </p>
+        <div className="setup-required-steps">
+          <button
+            type="button"
+            className={
+              hasModel ? "setup-required-step setup-required-step--done" : "setup-required-step"
+            }
+            onClick={() => {
+              props.onNavigate("geometry");
+              if (!hasModel) props.onRequestGeometryImport();
+            }}
+          >
+            <span>{hasModel ? <Check size={15} /> : "1"}</span>
+            <strong>{hasModel ? "Aircraft imported" : "Import your aircraft"}</strong>
+            <small>Use your own STL, OBJ, glTF, GLB, PLY or DAE model.</small>
+            <ChevronRight size={16} />
+          </button>
+          <button
+            type="button"
+            className={
+              hasMass ? "setup-required-step setup-required-step--done" : "setup-required-step"
+            }
+            disabled={!hasModel}
+            onClick={() => {
+              props.onSelect(props.project.vehicle.components[0]?.id ?? null);
+              props.onNavigate("geometry");
+            }}
+          >
+            <span>{hasMass ? <Check size={15} /> : "2"}</span>
+            <strong>{hasMass ? "Weight added" : "Add the real weight"}</strong>
+            <small>Select a part, then enter its measured weight in the right panel.</small>
+            <ChevronRight size={16} />
+          </button>
+          <button
+            type="button"
+            className={
+              hasBattery ? "setup-required-step setup-required-step--done" : "setup-required-step"
+            }
+            disabled={!hasModel}
+            onClick={() => props.onNavigate("propulsion")}
+          >
+            <span>{hasBattery ? <Check size={15} /> : "3"}</span>
+            <strong>{hasBattery ? "Battery added" : "Add motors and battery"}</strong>
+            <small>Calculations stay unavailable until this data exists.</small>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+        {!hasModel && (
+          <button
+            type="button"
+            className="button button--primary setup-required-card__primary"
+            onClick={() => {
+              props.onNavigate("geometry");
+              props.onRequestGeometryImport();
+            }}
+          >
+            <Upload size={15} /> Import your aircraft
+          </button>
+        )}
+      </section>
+    </div>
+  );
+}
+
 export function WorkspaceContent(props: WorkspaceContentProps) {
+  if (props.workspace === "geometry") return <GeometryWorkspace {...props} />;
+  if (props.workspace === "components") return <ComponentsWorkspace {...props} />;
+  if (props.workspace === "settings") return <SettingsWorkspace {...props} />;
+  if (props.analysis === null) return <AnalysisSetupWorkspace {...props} />;
+
+  const completeProps: CompleteWorkspaceContentProps = { ...props, analysis: props.analysis };
   switch (props.workspace) {
     case "home":
-      return <HomeWorkspace {...props} />;
-    case "geometry":
-      return <GeometryWorkspace {...props} />;
-    case "components":
-      return <ComponentsWorkspace {...props} />;
+      return <HomeWorkspace {...completeProps} />;
     case "mass":
-      return <MassWorkspace {...props} />;
+      return <MassWorkspace {...completeProps} />;
     case "propulsion":
-      return <PropulsionWorkspace {...props} />;
+      return <PropulsionWorkspace {...completeProps} />;
     case "aero":
-      return <AeroWorkspace {...props} />;
+      return <AeroWorkspace {...completeProps} />;
     case "cfd":
-      return <CfdWorkspace {...props} />;
+      return <CfdWorkspace {...completeProps} />;
     case "flight":
-      return <FlightWorkspace {...props} />;
+      return <FlightWorkspace {...completeProps} />;
     case "transition":
-      return <TransitionWorkspace {...props} />;
+      return <TransitionWorkspace {...completeProps} />;
     case "px4":
-      return <Px4Workspace {...props} />;
+      return <Px4Workspace {...completeProps} />;
     case "mission":
-      return <MissionWorkspace {...props} />;
+      return <MissionWorkspace {...completeProps} />;
     case "optimization":
-      return <OptimizationWorkspace {...props} />;
+      return <OptimizationWorkspace {...completeProps} />;
     case "results":
-      return <ResultsWorkspace {...props} />;
+      return <ResultsWorkspace {...completeProps} />;
     case "validation":
-      return <ValidationWorkspace {...props} />;
+      return <ValidationWorkspace {...completeProps} />;
     case "reports":
-      return <ReportsWorkspace {...props} />;
-    case "settings":
-      return <SettingsWorkspace {...props} />;
+      return <ReportsWorkspace {...completeProps} />;
   }
 }

@@ -1,10 +1,17 @@
 # User manual
 
-## Start with Kestrel
+## Create or open an aircraft file
 
-Launch the native app with `npm run desktop`. On first run, choose **Start with
-the example aircraft**. The example is designed to exercise every workspace; its
-numbers are illustrative, not measured.
+Launch the native app with `npm run desktop`. Aerocel Forge opens the file
+manager instead of loading a sample aircraft. Enter a name under **New empty
+file** to create a project with no parts, motors, batteries, or made-up results.
+The 3D importer opens next with **Whole drone model** selected. You can also open
+or delete a saved file from **Your saved files**.
+
+Use **File → New empty file**, **File → Open aircraft file**, or the shortcuts
+`Cmd+N` and `Cmd+O` at any time. Changes are saved automatically; **File → Save
+now** and `Cmd+S` force an immediate save before switching files. The retired
+Kestrel regression fixture is not offered in the app.
 
 Aerocel Forge starts in **Simple** mode. The activity rail uses plain names: Home,
 3D model, Parts, Weight, Power, Airflow, Fly, Transition, Route, Results, Reports,
@@ -39,7 +46,8 @@ To edit a part, right-click it in the 3D view, the left navigator, or the Parts
 table and choose **Edit part**. To remove a part, select it and press **Delete** or
 **Backspace**, use the right-click menu, or use **Delete this part** in the editor.
 Aerocel Forge shows attached children before deleting and automatically removes
-linked joints and propulsion setup. It will not let a project lose its last part.
+linked joints and propulsion setup. Deleting the last part safely returns the
+file to the empty import screen.
 
 You can also click any part in the left navigator to go straight to its editor.
 The **How this part works** section changes with the selected part. It provides
@@ -66,13 +74,13 @@ tensor using the parallel-axis theorem.
 
 ## Propulsion and aerodynamics
 
-Propulsion exposes P0/P1/P2/P3 fidelity explicitly. The built-in Kestrel view uses
-P2 BEMT with motor losses and battery voltage sag. Inspect convergence and model
-warnings before trusting thrust, torque, or endurance. P3 requires real CFD.
+Propulsion exposes P0/P1/P2/P3 fidelity explicitly. P2 BEMT includes motor losses
+and battery voltage sag. Inspect convergence and model warnings before trusting
+thrust, torque, or endurance. P3 requires real CFD.
 
 Rapid Aero runs the built-in A1 attached-flow parabolic polar across an angle-of-
 attack sweep. Lift, drag, pitching moment, span loading, stability estimates, and
-glide envelope are derived from the current example inputs and can be exported as
+glide envelope are derived from the current user inputs and can be exported as
 CSV. A1 is useful for concept trades, not separated-flow or propeller/airframe
 interaction validation.
 

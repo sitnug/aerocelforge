@@ -105,6 +105,14 @@ export async function listProjects(): Promise<readonly ProjectSummary[]> {
     .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
+export async function deleteProject(fileName: string): Promise<void> {
+  if (isNativeDesktop()) {
+    await invoke("delete_project", { fileName });
+    return;
+  }
+  localStorage.removeItem(`aerocel.project.${fileName}`);
+}
+
 function downloadText(fileName: string, content: string, mimeType: string): string {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);

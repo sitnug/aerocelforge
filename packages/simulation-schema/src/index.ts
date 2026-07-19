@@ -229,7 +229,7 @@ export const AerocelProjectSchema = z
         referencePointM: Vector3Schema,
         provenance: ProvenanceSchema
       }),
-      components: z.array(ComponentSchema).min(1),
+      components: z.array(ComponentSchema),
       joints: z.array(JointSchema),
       propulsionUnits: z.array(PropulsionUnitSchema),
       batteries: z.array(BatterySchema)

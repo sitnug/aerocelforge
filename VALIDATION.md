@@ -31,6 +31,8 @@ The repository covers:
   invented roll without a matching surface, individual-propeller offset moments,
   pressure-panel area scaling, custom propeller-key validation, and independent
   per-part coefficient persistence.
+- blank-project schema support, portable unique file naming, retired-sample
+  filtering, whole-aircraft import defaults, and deletion back to an empty file.
 
 Run the full matrix with the commands in [README.md](README.md). CI repeats the
 TypeScript, Python, and Rust gates on clean runners.
@@ -45,9 +47,10 @@ TypeScript, Python, and Rust gates on clean runners.
   contact; the Kestrel motor-out demonstration is expected to be a failed case.
 - Monte Carlo results require an explicit seed and report distribution statistics.
 
-## Reference project status
+## Regression fixture status
 
-Kestrel is an illustrative regression fixture, not measured aircraft data. It
+Kestrel remains an automated-test fixture and is not offered in the app. It is
+not measured aircraft data. It
 exercises 19 components, including left/right ailerons, an elevator, a rudder,
 two flaps, three independent tilt propulsion units, mass/inertia, A1 rapid
 aerodynamics, per-part interactive air loads, P2 propulsion, battery voltage sag,
@@ -70,7 +73,7 @@ No result should receive a validated grade solely because a solver completed.
 
 ## Build record — 2026-07-20, macOS 15.7.3 arm64
 
-- `npm run check`: passed; 67 TypeScript tests, strict type checking, lint,
+- `npm run check`: passed; 80 TypeScript tests, strict type checking, lint,
   formatting, and every workspace build passed.
 - Python 3.9: compilation and 3 unit tests passed; strict mypy and Ruff passed.
 - Scientific orchestrator: real loopback `/health` smoke test passed and correctly

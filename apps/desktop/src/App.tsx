@@ -9,8 +9,10 @@ import {
   Command,
   Cpu,
   Fan,
+  FilePlus2,
   FileUp,
   FileText,
+  FolderOpen,
   Gauge,
   GitCompareArrows,
   Home,
@@ -35,16 +37,18 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import { runRapidAnalysis, defaultAnalysisOptions, type AnalysisOptions } from "./lib/analysis";
 import { inspectGeometryFile } from "./lib/importers";
-import { kestrelProject } from "./lib/kestrel";
 import {
+  deleteProject,
   getSystemProfile,
   isNativeDesktop,
   listProjects,
   loadGeometrySource,
   loadProject,
   saveProject,
+  type ProjectSummary,
   type SystemProfile
 } from "./lib/native";
+import { createBlankProject, isLegacyExampleProject, uniqueProjectFileName } from "./lib/projects";
 import { WorkspaceContent } from "./components/WorkspaceContent";
 import { InfoTip } from "./components/InfoTip";
 import {
@@ -60,6 +64,7 @@ import {
 } from "./lib/componentOperations";
 import { readAdvancedPreference, readThemePreference, type AppTheme } from "./lib/preferences";
 import "./styles.css";
+import { ProjectManagerDialog } from "./components/ProjectManagerDialog";
 
 export type WorkspaceId =
   | "home"
@@ -384,9 +389,9 @@ function ComponentNavigator({
       <div className="navigator-footnote">
         <ShieldCheck size={14} />
         <span>
-          Example inputs
+          User-entered inputs
           <br />
-          <small>Not experimentally validated</small>
+          <small>Review before real-world use</small>
         </span>
       </div>
     </aside>
@@ -461,14 +466,26 @@ function CommandPalette({
   );
 }
 
-function FileMenu({ onImportModel }: { readonly onImportModel: () => void }) {
+function FileMenu({
+  hasActiveProject,
+  onNewProject,
+  onOpenProjects,
+  onSave,
+  onImportModel
+}: {
+  readonly hasActiveProject: boolean;
+  readonly onNewProject: () => void;
+  readonly onOpenProjects: () => void;
+  readonly onSave: () => void;
+  readonly onImportModel: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const importItemRef = useRef<HTMLButtonElement>(null);
+  const firstItemRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!open) return;
-    importItemRef.current?.focus();
+    firstItemRef.current?.focus();
     const closeOnPointerDown = (event: PointerEvent): void => {
       if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
     };
@@ -497,9 +514,57 @@ function FileMenu({ onImportModel }: { readonly onImportModel: () => void }) {
       {open && (
         <div className="file-menu" role="menu" aria-label="File actions">
           <button
-            ref={importItemRef}
+            ref={firstItemRef}
             type="button"
             role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onNewProject();
+            }}
+          >
+            <FilePlus2 size={15} />
+            <span>
+              <strong>New empty file…</strong>
+              <small>Create a file with no sample aircraft</small>
+            </span>
+            <kbd>⌘N</kbd>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onOpenProjects();
+            }}
+          >
+            <FolderOpen size={15} />
+            <span>
+              <strong>Open aircraft file…</strong>
+              <small>View your saved Aerocel files</small>
+            </span>
+            <kbd>⌘O</kbd>
+          </button>
+          <div className="file-menu__divider" role="separator" />
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!hasActiveProject}
+            onClick={() => {
+              setOpen(false);
+              onSave();
+            }}
+          >
+            <Save size={15} />
+            <span>
+              <strong>Save now</strong>
+              <small>Autosave is also always on</small>
+            </span>
+            <kbd>⌘S</kbd>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!hasActiveProject}
             onClick={() => {
               setOpen(false);
               onImportModel();
@@ -652,7 +717,7 @@ function SetupWizard({
             Open advanced setup
           </button>
           <button type="button" className="button button--primary" onClick={onClose}>
-            Start with the example aircraft <ChevronRight size={16} />
+            Continue to your files <ChevronRight size={16} />
           </button>
         </footer>
       </section>
@@ -661,22 +726,25 @@ function SetupWizard({
 }
 
 export default function App() {
-  const [project, setProject] = useState<AerocelProject>(kestrelProject);
+  const [project, setProject] = useState<AerocelProject>(() =>
+    createBlankProject("Untitled aircraft")
+  );
   const [geometryAssets, setGeometryAssets] = useState<ReadonlyMap<string, TriangleMesh>>(
     () => new Map()
   );
-  const [activeProjectFileName, setActiveProjectFileName] = useState("Kestrel Baseline");
+  const [activeProjectFileName, setActiveProjectFileName] = useState<string | null>(null);
+  const [projects, setProjects] = useState<readonly ProjectSummary[]>([]);
+  const [projectLibraryLoading, setProjectLibraryLoading] = useState(true);
+  const [projectManagerOpen, setProjectManagerOpen] = useState(true);
   const [projectReady, setProjectReady] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>("geometry");
-  const [selectedId, setSelectedId] = useState<string | null>(
-    project.vehicle.components[1]?.id ?? null
-  );
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [analysisOptions, setAnalysisOptions] = useState<AnalysisOptions>(defaultAnalysisOptions);
   const [viewportOptions, setViewportOptions] = useState<ViewportOptions>(defaultViewportOptions);
   const [systemProfile, setSystemProfile] = useState<SystemProfile | null>(null);
   const [saveState, setSaveState] = useState<SaveState>({
     status: "idle",
-    detail: "Example loaded"
+    detail: "No file open"
   });
   const [commandOpen, setCommandOpen] = useState(false);
   const [geometryImportOpen, setGeometryImportOpen] = useState(false);
@@ -722,10 +790,32 @@ export default function App() {
       };
     }
   }, [deleteRequestId, project]);
-  const analysis = useMemo(
-    () => runRapidAnalysis(project, analysisOptions, geometryAssets),
-    [project, analysisOptions, geometryAssets]
-  );
+  const analysisState = useMemo<{
+    readonly analysis: ReturnType<typeof runRapidAnalysis> | null;
+    readonly reason: string | null;
+  }>(() => {
+    if (project.vehicle.components.length === 0) {
+      return { analysis: null, reason: "Import your aircraft model first." };
+    }
+    if (!project.vehicle.components.some((component) => (component.mass?.valueKg ?? 0) > 0)) {
+      return { analysis: null, reason: "Add the real weight to at least one part." };
+    }
+    if (project.vehicle.batteries.length === 0) {
+      return { analysis: null, reason: "Add a battery before running flight calculations." };
+    }
+    try {
+      return {
+        analysis: runRapidAnalysis(project, analysisOptions, geometryAssets),
+        reason: null
+      };
+    } catch (error: unknown) {
+      return {
+        analysis: null,
+        reason: error instanceof Error ? error.message : "The aircraft is not ready to calculate."
+      };
+    }
+  }, [project, analysisOptions, geometryAssets]);
+  const analysis = analysisState.analysis;
 
   useEffect(() => {
     localStorage.setItem("aerocel.theme", theme);
@@ -741,46 +831,17 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    const restore = async (): Promise<void> => {
-      try {
-        const projects = await listProjects();
-        const latest = projects[0];
-        if (latest === undefined) return;
-        const restored = await loadProject(latest.fileName);
-        if (cancelled) return;
-        setActiveProjectFileName(latest.fileName);
-        setProject(restored);
-        setSelectedId(restored.vehicle.components[0]?.id ?? null);
-        const restoredAssets = new Map<string, TriangleMesh>();
-        for (const component of restored.vehicle.components) {
-          const sha = component.geometry.sourceSha256;
-          const sourceName = component.properties.sourceFileName;
-          if (sha === null || typeof sourceName !== "string") continue;
-          try {
-            const file = await loadGeometrySource(sourceName, sha);
-            if (file === null) continue;
-            const inspection = await inspectGeometryFile(file, {
-              requestedFormat: "auto",
-              originalUnits: component.geometry.originalUnits
-            });
-            if (inspection.mesh !== null) restoredAssets.set(sha, inspection.mesh);
-          } catch (error: unknown) {
-            const detail = error instanceof Error ? error.message : String(error);
-            setRecentErrors((current) => [
-              ...current,
-              `Geometry restore ${component.name}: ${detail}`
-            ]);
-          }
-        }
-        if (!cancelled) setGeometryAssets(restoredAssets);
-      } catch (error: unknown) {
+    void listProjects()
+      .then((savedProjects) => {
+        if (!cancelled) setProjects(savedProjects.filter((item) => !isLegacyExampleProject(item)));
+      })
+      .catch((error: unknown) => {
         const detail = error instanceof Error ? error.message : String(error);
-        setRecentErrors((current) => [...current, `Project restore: ${detail}`]);
-      } finally {
-        if (!cancelled) setProjectReady(true);
-      }
-    };
-    void restore();
+        if (!cancelled) setRecentErrors((current) => [...current, `Project list: ${detail}`]);
+      })
+      .finally(() => {
+        if (!cancelled) setProjectLibraryLoading(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -834,14 +895,41 @@ export default function App() {
 
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        setProjectManagerOpen(true);
+      }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "o") {
+        event.preventDefault();
+        setProjectManagerOpen(true);
+      }
+      if (
+        (event.metaKey || event.ctrlKey) &&
+        event.key.toLowerCase() === "s" &&
+        activeProjectFileName !== null
+      ) {
+        event.preventDefault();
+        const updated = { ...project, updatedAt: new Date().toISOString() };
+        setSaveState({ status: "saving", detail: "Saving…" });
+        void saveProject(activeProjectFileName, updated)
+          .then(() => setSaveState({ status: "saved", detail: "Saved now" }))
+          .catch((error: unknown) => {
+            const detail = error instanceof Error ? error.message : String(error);
+            setSaveState({ status: "error", detail });
+          });
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
         setCommandOpen((current) => !current);
       }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "i") {
         event.preventDefault();
-        setActiveWorkspace("geometry");
-        setGeometryImportOpen(true);
+        if (activeProjectFileName === null) {
+          setProjectManagerOpen(true);
+        } else {
+          setActiveWorkspace("geometry");
+          setGeometryImportOpen(true);
+        }
       }
       if (event.key === "Escape") setCommandOpen(false);
       if (
@@ -853,6 +941,7 @@ export default function App() {
         selectedId !== null &&
         !geometryImportOpen &&
         !setupOpen &&
+        !projectManagerOpen &&
         !commandOpen &&
         deleteRequestId === null
       ) {
@@ -863,10 +952,19 @@ export default function App() {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [commandOpen, deleteRequestId, geometryImportOpen, selectedId, setupOpen]);
+  }, [
+    activeProjectFileName,
+    commandOpen,
+    deleteRequestId,
+    geometryImportOpen,
+    project,
+    projectManagerOpen,
+    selectedId,
+    setupOpen
+  ]);
 
   useEffect(() => {
-    if (!projectReady) return;
+    if (!projectReady || activeProjectFileName === null) return;
     setSaveState({ status: "saving", detail: "Saving…" });
     const timer = window.setTimeout(() => {
       const updated = { ...project, updatedAt: new Date().toISOString() };
@@ -895,6 +993,91 @@ export default function App() {
   const closeSetup = (): void => {
     localStorage.setItem("aerocel.setup.dismissed", "true");
     setSetupOpen(false);
+  };
+
+  const refreshProjectLibrary = async (): Promise<void> => {
+    setProjects((await listProjects()).filter((item) => !isLegacyExampleProject(item)));
+  };
+
+  const saveCurrentNow = async (): Promise<void> => {
+    if (!projectReady || activeProjectFileName === null) return;
+    const updated = { ...project, updatedAt: new Date().toISOString() };
+    setSaveState({ status: "saving", detail: "Saving…" });
+    await saveProject(activeProjectFileName, updated);
+    setSaveState({ status: "saved", detail: "Saved now" });
+  };
+
+  const loadProjectGeometry = async (
+    restored: AerocelProject
+  ): Promise<ReadonlyMap<string, TriangleMesh>> => {
+    const restoredAssets = new Map<string, TriangleMesh>();
+    for (const component of restored.vehicle.components) {
+      const sha = component.geometry.sourceSha256;
+      const sourceName = component.properties.sourceFileName;
+      if (sha === null || typeof sourceName !== "string") continue;
+      try {
+        const file = await loadGeometrySource(sourceName, sha);
+        if (file === null) continue;
+        const inspection = await inspectGeometryFile(file, {
+          requestedFormat: "auto",
+          originalUnits: component.geometry.originalUnits
+        });
+        if (inspection.mesh !== null) restoredAssets.set(sha, inspection.mesh);
+      } catch (error: unknown) {
+        const detail = error instanceof Error ? error.message : String(error);
+        setRecentErrors((current) => [...current, `Geometry restore ${component.name}: ${detail}`]);
+      }
+    }
+    return restoredAssets;
+  };
+
+  const createProjectFile = async (name: string): Promise<void> => {
+    await saveCurrentNow();
+    const blank = createBlankProject(name);
+    const allSavedProjects = await listProjects();
+    const fileName = uniqueProjectFileName(
+      name,
+      allSavedProjects.map((item) => item.fileName)
+    );
+    await saveProject(fileName, blank);
+    setProjectReady(false);
+    setProject(blank);
+    setGeometryAssets(new Map());
+    setSelectedId(null);
+    setActiveProjectFileName(fileName);
+    setActiveWorkspace("geometry");
+    setSaveState({ status: "saved", detail: "New empty file saved" });
+    setProjectReady(true);
+    await refreshProjectLibrary();
+    setProjectManagerOpen(false);
+    setGeometryImportOpen(true);
+  };
+
+  const openProjectFile = async (fileName: string): Promise<void> => {
+    if (fileName === activeProjectFileName) {
+      setProjectManagerOpen(false);
+      return;
+    }
+    await saveCurrentNow();
+    const restored = await loadProject(fileName);
+    const restoredAssets = await loadProjectGeometry(restored);
+    setProjectReady(false);
+    setProject(restored);
+    setGeometryAssets(restoredAssets);
+    setSelectedId(restored.vehicle.components[0]?.id ?? null);
+    setActiveProjectFileName(fileName);
+    setActiveWorkspace(restored.vehicle.components.length === 0 ? "geometry" : "home");
+    setSaveState({ status: "saved", detail: "Saved file opened" });
+    setProjectReady(true);
+    setProjectManagerOpen(false);
+  };
+
+  const deleteProjectFile = async (fileName: string): Promise<void> => {
+    if (fileName === activeProjectFileName) {
+      throw new Error("Open another file before deleting the file you are using.");
+    }
+    await deleteProject(fileName);
+    await refreshProjectLibrary();
   };
 
   const setTiltAngle = (jointId: string, angleRad: number): void => {
@@ -989,6 +1172,16 @@ export default function App() {
           <strong>Aerocel Forge</strong>
         </div>
         <FileMenu
+          hasActiveProject={activeProjectFileName !== null}
+          onNewProject={() => setProjectManagerOpen(true)}
+          onOpenProjects={() => setProjectManagerOpen(true)}
+          onSave={() => {
+            void saveCurrentNow().catch((error: unknown) => {
+              const detail = error instanceof Error ? error.message : String(error);
+              setSaveState({ status: "error", detail });
+              setToast(`Could not save: ${detail}`);
+            });
+          }}
           onImportModel={() => {
             setActiveWorkspace("geometry");
             setGeometryImportOpen(true);
@@ -1035,7 +1228,9 @@ export default function App() {
                 ? "Saving"
                 : saveState.status === "error"
                   ? "Save failed"
-                  : "Autosaved"}
+                  : activeProjectFileName === null
+                    ? "No file"
+                    : "Autosaved"}
             </span>
           </div>
           <button
@@ -1088,6 +1283,7 @@ export default function App() {
             onPartContextMenu={openPartContextMenu}
             onRequestPartDelete={requestPartDelete}
             analysis={analysis}
+            analysisUnavailableReason={analysisState.reason}
             analysisOptions={analysisOptions}
             setAnalysisOptions={setAnalysisOptions}
             viewportOptions={viewportOptions}
@@ -1123,7 +1319,10 @@ export default function App() {
           title="Toggle assembly navigator"
         >
           <PanelLeftClose size={13} />
-          <span>{project.vehicle.components.length} components</span>
+          <span>
+            {project.vehicle.components.length} component
+            {project.vehicle.components.length === 1 ? "" : "s"}
+          </span>
         </button>
         <span className="status-divider" />
         {advancedMode ? (
@@ -1148,7 +1347,9 @@ export default function App() {
           <ShieldCheck size={13} /> Early estimate · not an aircraft safety approval
         </span>
         <span className="status-divider" />
-        <span>{analysis.mass.massKg.toFixed(2)} kg</span>
+        <span>
+          {analysis === null ? "Aircraft setup needed" : `${analysis.mass.massKg.toFixed(2)} kg`}
+        </span>
       </footer>
       <PartContextMenu
         menu={partContextMenu}
@@ -1174,6 +1375,17 @@ export default function App() {
         profile={systemProfile}
         onClose={closeSetup}
         onOpenSettings={() => setActiveWorkspace("settings")}
+      />
+      <ProjectManagerDialog
+        open={projectManagerOpen}
+        projects={projects}
+        activeFileName={activeProjectFileName}
+        loading={projectLibraryLoading}
+        canClose={activeProjectFileName !== null}
+        onClose={() => setProjectManagerOpen(false)}
+        onCreate={createProjectFile}
+        onOpen={openProjectFile}
+        onDelete={deleteProjectFile}
       />
       {toast !== null && (
         <div className="toast" role="status">

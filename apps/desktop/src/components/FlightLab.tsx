@@ -68,7 +68,7 @@ interface FlightLabProps {
   readonly advancedMode: boolean;
 }
 
-const DEFAULT_PROGRAM = `# Kestrel autonomous survey circuit
+const DEFAULT_PROGRAM = `# Autonomous survey circuit
 ALTITUDE 40
 AIRSPEED 20
 HEADING 0

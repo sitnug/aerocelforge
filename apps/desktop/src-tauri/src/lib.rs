@@ -318,6 +318,17 @@ fn list_projects(app: tauri::AppHandle) -> Result<Vec<ProjectSummary>, String> {
 }
 
 #[tauri::command]
+fn delete_project(app: tauri::AppHandle, file_name: String) -> Result<(), String> {
+    let file_name = safe_file_name(&file_name, ".aerocel.json")?;
+    let path = managed_directory(&app, "projects")?.join(file_name);
+    if !path.exists() {
+        return Err("Project file no longer exists".to_string());
+    }
+    fs::remove_file(&path)
+        .map_err(|error| format!("Could not delete project {}: {error}", path.display()))
+}
+
+#[tauri::command]
 fn write_report(app: tauri::AppHandle, file_name: String, html: String) -> Result<String, String> {
     if html.len() > 20_000_000 {
         return Err("Report exceeds the 20 MB local export limit".to_string());
@@ -426,6 +437,7 @@ pub fn run() {
             save_project,
             load_project,
             list_projects,
+            delete_project,
             write_report,
             archive_geometry_source,
             load_geometry_source,

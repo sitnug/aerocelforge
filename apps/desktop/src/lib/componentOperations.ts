@@ -32,25 +32,6 @@ export function planComponentDeletion(
     }
   }
 
-  if (componentIds.size === project.vehicle.components.length) {
-    throw new Error(
-      "A project must keep at least one part. Import another model before deleting this one."
-    );
-  }
-
-  const remainingComponents = project.vehicle.components.filter(
-    (component) => !componentIds.has(component.id)
-  );
-  const remainingMassKg = remainingComponents.reduce(
-    (sum, component) => sum + (component.mass?.valueKg ?? 0),
-    0
-  );
-  if (remainingMassKg <= 0) {
-    throw new Error(
-      "This would leave the aircraft with no weight. Give another remaining part a positive weight before deleting this part."
-    );
-  }
-
   const jointIds = project.vehicle.joints
     .filter(
       (joint) =>

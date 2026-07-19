@@ -2,6 +2,53 @@ import { describe, expect, it } from "vitest";
 import { AerocelProjectSchema, SCHEMA_VERSION } from "./index";
 
 describe("AerocelProjectSchema", () => {
+  it("accepts a blank project before the user imports an aircraft", () => {
+    const timestamp = "2026-07-20T12:00:00.000Z";
+    const result = AerocelProjectSchema.safeParse({
+      schemaVersion: SCHEMA_VERSION,
+      projectId: "28637866-1aaf-4b75-8f13-5bf7c37c8c48",
+      name: "Blank aircraft",
+      revision: "1",
+      description: "",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      conventions: {
+        internalUnits: "SI",
+        bodyFrame: "FRD",
+        worldFrame: "NED",
+        angles: "radians",
+        pressure: "absolute_pascal"
+      },
+      vehicle: {
+        name: "Blank aircraft",
+        description: "",
+        reference: {
+          areaM2: 1,
+          spanM: 1,
+          chordM: 1,
+          referencePointM: [0, 0, 0],
+          provenance: "user_entered"
+        },
+        components: [],
+        joints: [],
+        propulsionUnits: [],
+        batteries: []
+      },
+      environment: {
+        altitudeM: 0,
+        temperatureK: null,
+        windNedMS: [0, 0, 0],
+        turbulence: "none",
+        provenance: "user_entered"
+      },
+      results: [],
+      tags: [],
+      warnings: []
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it("rejects a project whose joint references a missing component", () => {
     const project = {
       schemaVersion: SCHEMA_VERSION,

@@ -70,8 +70,9 @@ cd aerocelforge
 npm run desktop
 ```
 
-The included **Kestrel** example opens on first run. Its values are examples,
-not measurements from a real aircraft.
+The app opens a file manager on launch. Create a named empty file, then import
+your own aircraft; no sample aircraft is loaded or offered. Existing user files
+can be opened or deleted from the same screen.
 
 ### Run the browser preview
 
@@ -98,7 +99,9 @@ See [MACOS_SETUP.md](MACOS_SETUP.md) for signing, packaging, and troubleshooting
 
 ## Import a 3D model
 
-Open **File → Import model** or use **Import model** in the 3D workspace. Choose:
+Create a project with **File → New empty file**, then use the importer that opens
+automatically. You can also open **File → Import model** or use **Import model**
+in the 3D workspace. Choose:
 
 1. The file type, or **Auto-detect**.
 2. The units used by the source file.
