@@ -1,0 +1,4 @@
+# Copy values into the remote service manager; do not store secrets here.
+AEROCEL_RUNTIME_ROOT=/srv/aerocel/runtime
+PATH=/usr/local/bin:/usr/bin:/bin
+PYTHONUNBUFFERED=1

@@ -1,0 +1,17 @@
+# Pin this tag to an organization-verified digest in a deployment lock file.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    AEROCEL_RUNTIME_ROOT=/var/lib/aerocel
+
+RUN useradd --create-home --uid 10001 aerocel
+WORKDIR /opt/aerocel
+COPY services/scientific-orchestrator/ ./
+RUN pip install --no-cache-dir .
+RUN mkdir -p /var/lib/aerocel/cases /var/lib/aerocel/logs \
+    && chown -R aerocel:aerocel /var/lib/aerocel
+
+USER aerocel
+EXPOSE 8765
+CMD ["uvicorn", "aerocel_service.main:app", "--host", "0.0.0.0", "--port", "8765"]

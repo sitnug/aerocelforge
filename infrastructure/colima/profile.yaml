@@ -1,0 +1,13 @@
+# Merge into a dedicated Colima profile; do not overwrite unrelated profiles.
+cpu: 6
+memory: 12
+disk: 80
+arch: host
+runtime: docker
+kubernetes:
+  enabled: false
+network:
+  address: false
+mounts:
+  - location: /tmp/aerocel-cases
+    writable: true

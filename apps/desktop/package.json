@@ -1,0 +1,42 @@
+{
+  "name": "@aerocel/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 1420",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 4173",
+    "typecheck": "tsc -b",
+    "test": "vitest run",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@aerocel/aero-models": "*",
+    "@aerocel/flight-dynamics": "*",
+    "@aerocel/geometry-core": "*",
+    "@aerocel/optimization": "*",
+    "@aerocel/propulsion-models": "*",
+    "@aerocel/report-generator": "*",
+    "@aerocel/result-models": "*",
+    "@aerocel/simulation-schema": "*",
+    "@aerocel/solver-adapters": "*",
+    "@aerocel/unit-system": "*",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.6.1",
+    "@tauri-apps/api": "^2.11.1",
+    "lucide-react": "^1.25.0",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "three": "^0.185.1"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.185.0",
+    "@vitejs/plugin-react": "^6.0.3",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
+  }
+}

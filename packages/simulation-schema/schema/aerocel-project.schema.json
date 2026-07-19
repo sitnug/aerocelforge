@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.aerocel-forge.dev/project/1.0.0",
+  "title": "Aerocel Forge Project",
+  "description": "Stable interchange envelope. Runtime validation in @aerocel/simulation-schema applies additional relational constraints.",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "projectId",
+    "name",
+    "revision",
+    "createdAt",
+    "updatedAt",
+    "conventions",
+    "vehicle",
+    "environment",
+    "results"
+  ],
+  "properties": {
+    "schemaVersion": { "const": "1.0.0" },
+    "projectId": { "type": "string", "format": "uuid" },
+    "name": { "type": "string", "minLength": 1 },
+    "revision": { "type": "string", "minLength": 1 },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "conventions": {
+      "type": "object",
+      "required": ["internalUnits", "bodyFrame", "worldFrame", "angles", "pressure"],
+      "properties": {
+        "internalUnits": { "const": "SI" },
+        "bodyFrame": { "const": "FRD" },
+        "worldFrame": { "const": "NED" },
+        "angles": { "const": "radians" },
+        "pressure": { "const": "absolute_pascal" }
+      },
+      "additionalProperties": false
+    },
+    "vehicle": { "type": "object" },
+    "environment": { "type": "object" },
+    "results": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}

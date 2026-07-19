@@ -1,0 +1,19 @@
+{
+  "name": "@aerocel/flight-dynamics",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@aerocel/math-core": "*",
+    "@aerocel/unit-system": "*"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
+}
