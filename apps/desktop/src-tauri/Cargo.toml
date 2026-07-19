@@ -1,6 +1,6 @@
 [package]
 name = "aerocel-forge"
-version = "0.1.0"
+version = "1.0.0"
 description = "Aerocel Forge native desktop host"
 authors = ["Aerocel Forge contributors"]
 edition = "2021"

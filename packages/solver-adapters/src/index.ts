@@ -135,7 +135,7 @@ function assertSafeRelativePath(path: string): void {
 export class OpenFoamAdapter implements SolverAdapter<CfdCaseInput, CfdResultManifest> {
   public readonly id = "openfoam";
   public readonly displayName = "OpenFOAM";
-  public readonly adapterVersion = "0.1.0";
+  public readonly adapterVersion = "1.0.0";
 
   public validate(input: CfdCaseInput): readonly string[] {
     const errors: string[] = [];

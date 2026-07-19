@@ -27,15 +27,18 @@ npm run dev
 ```
 
 The Kestrel tri-tilt example opens from the first-run screen. Its dimensions and
-component values are explicitly marked as illustrative user-entered data.
+component values are explicitly marked as illustrative user-entered data. The
+app starts in **Simple** mode with the high-contrast **Bright** theme. Use the
+top-bar controls or **Settings** to choose the dark **Cockpit** theme or reveal
+specialist **Advanced** tools. These view choices do not change project data.
 
-To add geometry, open **Geometry** and choose **Import model**. Select a model
+To add geometry, open **3D model** and choose **Import model**. Select a model
 type (or auto-detect), confirm source units and semantic component type, then
 choose one file or drag it onto the drop zone. Locally supported triangle formats
-are inspected before **Add to assembly** becomes available; CAD and articulated
+are inspected before **Add to aircraft** becomes available; CAD and articulated
 assembly formats remain explicitly gated on their named external adapters.
 
-To fly the loaded vehicle, open **Fly**. The interactive Flight Lab provides
+To fly the loaded vehicle, open **Fly**. The Flight Simulator provides
 on-screen Mode 2 sticks, keyboard and standard gamepad control, hover and cruise
 starts, stabilization/altitude/return-home modes, wind and autopilot targets,
 battery and force telemetry, and a safe waypoint behavior language. See
@@ -45,6 +48,8 @@ the explicit physical-validation boundary.
 The application window is resizable and has an explicit fullscreen control in
 the title bar. In the Flight Lab, **View height** resizes the 3D stage and
 **Focus** fills the application with the simulator; Escape exits Focus mode.
+Small `i` controls beside unfamiliar sections and values open plain-language
+help with hover, keyboard focus, or click.
 
 ## Verification
 

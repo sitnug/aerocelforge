@@ -25,7 +25,9 @@ import {
   Search,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   Sparkles,
+  Sun,
   Wind,
   X,
   type LucideIcon
@@ -44,7 +46,9 @@ import {
   type SystemProfile
 } from "./lib/native";
 import { WorkspaceContent } from "./components/WorkspaceContent";
+import { InfoTip } from "./components/InfoTip";
 import type { ViewportOptions } from "./components/AircraftViewport";
+import { readAdvancedPreference, readThemePreference, type AppTheme } from "./lib/preferences";
 import "./styles.css";
 
 export type WorkspaceId =
@@ -71,75 +75,98 @@ interface WorkspaceDefinition {
   readonly shortLabel: string;
   readonly icon: LucideIcon;
   readonly group: "build" | "analyze" | "verify";
+  readonly advanced?: boolean;
 }
 
 const workspaces: readonly WorkspaceDefinition[] = [
-  { id: "home", label: "Project overview", shortLabel: "Home", icon: Home, group: "build" },
-  { id: "geometry", label: "Geometry", shortLabel: "Geometry", icon: Box, group: "build" },
+  { id: "home", label: "Project home", shortLabel: "Home", icon: Home, group: "build" },
+  { id: "geometry", label: "3D model", shortLabel: "3D model", icon: Box, group: "build" },
   {
     id: "components",
-    label: "Components & joints",
-    shortLabel: "Components",
+    label: "Parts and movement",
+    shortLabel: "Parts",
     icon: Layers3,
     group: "build"
   },
-  { id: "mass", label: "Materials & mass", shortLabel: "Mass", icon: Scale, group: "build" },
-  { id: "propulsion", label: "Propulsion", shortLabel: "Propulsion", icon: Fan, group: "analyze" },
+  { id: "mass", label: "Weight and balance", shortLabel: "Weight", icon: Scale, group: "build" },
+  {
+    id: "propulsion",
+    label: "Motors and battery",
+    shortLabel: "Power",
+    icon: Fan,
+    group: "analyze"
+  },
   {
     id: "aero",
-    label: "Rapid aerodynamics",
-    shortLabel: "Rapid aero",
+    label: "Quick flight estimate",
+    shortLabel: "Airflow",
     icon: Wind,
     group: "analyze"
   },
-  { id: "cfd", label: "CFD wind tunnel", shortLabel: "CFD", icon: CloudCog, group: "analyze" },
+  {
+    id: "cfd",
+    label: "Advanced wind test (CFD)",
+    shortLabel: "Wind test",
+    icon: CloudCog,
+    group: "analyze",
+    advanced: true
+  },
   {
     id: "flight",
-    label: "Interactive flight simulator",
+    label: "Flight simulator",
     shortLabel: "Fly",
     icon: Gauge,
     group: "analyze"
   },
   {
     id: "transition",
-    label: "VTOL transition",
+    label: "Hover to cruise",
     shortLabel: "Transition",
     icon: PlaneTakeoff,
     group: "analyze"
   },
-  { id: "px4", label: "PX4 simulation", shortLabel: "PX4", icon: Cpu, group: "analyze" },
+  {
+    id: "px4",
+    label: "PX4 autopilot simulator",
+    shortLabel: "Autopilot",
+    icon: Cpu,
+    group: "analyze",
+    advanced: true
+  },
   {
     id: "mission",
-    label: "Mission simulation",
-    shortLabel: "Mission",
+    label: "Route planner",
+    shortLabel: "Route",
     icon: MapIcon,
     group: "analyze"
   },
   {
     id: "optimization",
-    label: "Optimization",
-    shortLabel: "Optimize",
+    label: "Design choices",
+    shortLabel: "Choices",
     icon: ChartNoAxesCombined,
-    group: "verify"
+    group: "verify",
+    advanced: true
   },
   {
     id: "results",
-    label: "Results comparison",
-    shortLabel: "Compare",
+    label: "Compare results",
+    shortLabel: "Results",
     icon: GitCompareArrows,
     group: "verify"
   },
   {
     id: "validation",
-    label: "Validation",
-    shortLabel: "Validation",
+    label: "Engineering checks",
+    shortLabel: "Checks",
     icon: ShieldCheck,
-    group: "verify"
+    group: "verify",
+    advanced: true
   },
   { id: "reports", label: "Reports", shortLabel: "Reports", icon: FileText, group: "verify" },
   {
     id: "settings",
-    label: "Settings & solvers",
+    label: "Settings and tools",
     shortLabel: "Settings",
     icon: Settings,
     group: "verify"
@@ -164,10 +191,12 @@ type SaveState =
 
 function ActivityRail({
   active,
-  onChange
+  onChange,
+  items
 }: {
   readonly active: WorkspaceId;
   readonly onChange: (workspace: WorkspaceId) => void;
+  readonly items: readonly WorkspaceDefinition[];
 }) {
   return (
     <nav className="activity-rail" aria-label="Engineering workspaces">
@@ -176,9 +205,9 @@ function ActivityRail({
         <span className="activity-logo__core" />
       </div>
       <div className="activity-scroll">
-        {workspaces.map((workspace, index) => {
+        {items.map((workspace, index) => {
           const Icon = workspace.icon;
-          const showDivider = index > 0 && workspaces[index - 1]?.group !== workspace.group;
+          const showDivider = index > 0 && items[index - 1]?.group !== workspace.group;
           return (
             <div
               key={workspace.id}
@@ -340,18 +369,20 @@ function ComponentNavigator({
 function CommandPalette({
   open,
   onClose,
-  onNavigate
+  onNavigate,
+  items
 }: {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly onNavigate: (workspace: WorkspaceId) => void;
+  readonly items: readonly WorkspaceDefinition[];
 }) {
   const [query, setQuery] = useState("");
   useEffect(() => {
     if (open) setQuery("");
   }, [open]);
   if (!open) return null;
-  const matches = workspaces.filter((workspace) =>
+  const matches = items.filter((workspace) =>
     workspace.label.toLowerCase().includes(query.toLowerCase())
   );
   return (
@@ -369,13 +400,13 @@ function CommandPalette({
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Go to a workspace…"
+            placeholder="Find a screen…"
             aria-label="Search commands"
           />
           <kbd>esc</kbd>
         </div>
         <div className="command-results">
-          <small>WORKSPACES</small>
+          <small>SCREENS</small>
           {matches.map((workspace) => {
             const Icon = workspace.icon;
             return (
@@ -487,8 +518,8 @@ function SetupWizard({
             <Sparkles size={20} />
           </div>
           <span>
-            <small>FIRST-RUN SETUP</small>
-            <h2 id="setup-title">Prepare this Mac for engineering work</h2>
+            <small>WELCOME TO AEROCEL FORGE</small>
+            <h2 id="setup-title">Get Aerocel Forge ready</h2>
           </span>
           <button
             type="button"
@@ -502,9 +533,9 @@ function SetupWizard({
         <div className="setup-content">
           <div className="setup-hero">
             <div className="setup-machine">
-              <span>HOST</span>
+              <span>COMPUTER</span>
               <strong>{profile?.architecture ?? "Detecting…"}</strong>
-              <small>{profile?.operatingSystem ?? "Reading local capabilities"}</small>
+              <small>{profile?.operatingSystem ?? "Checking this computer"}</small>
             </div>
             <div className="setup-machine">
               <span>MEMORY</span>
@@ -513,20 +544,20 @@ function SetupWizard({
                   ? "—"
                   : `${profile.memoryGb.toFixed(0)} GB`}
               </strong>
-              <small>Light and moderate jobs are scheduled locally</small>
+              <small>Used for 3D models and calculations</small>
             </div>
             <div className="setup-machine">
-              <span>CAPABILITIES</span>
+              <span>EXTRA TOOLS</span>
               <strong>{profile === null ? "…" : `${available}/${total}`}</strong>
-              <small>Detected, not yet solver-verified</small>
+              <small>Optional tools found on this computer</small>
             </div>
           </div>
           <ol className="setup-steps">
             <li className="setup-step setup-step--done">
               <span>1</span>
               <div>
-                <strong>Native workspace</strong>
-                <small>Tauri host, WebGL renderer, managed project storage</small>
+                <strong>App basics</strong>
+                <small>The 3D view and local project saving are ready</small>
               </div>
               <ShieldCheck size={17} />
             </li>
@@ -540,10 +571,10 @@ function SetupWizard({
             >
               <span>2</span>
               <div>
-                <strong>Scientific runtime</strong>
+                <strong>Calculation tools</strong>
                 <small>
                   {profile?.capabilities.find((item) => item.id === "python")?.reason ??
-                    "Checking Python"}
+                    "Checking the optional calculation helper"}
                 </small>
               </div>
               <span className="setup-status">
@@ -556,18 +587,16 @@ function SetupWizard({
             <li className="setup-step">
               <span>3</span>
               <div>
-                <strong>Linux solver environment</strong>
-                <small>Docker, Colima, Lima, or OrbStack for OpenFOAM, PX4, and Gazebo</small>
+                <strong>Advanced simulators</strong>
+                <small>Optional setup for detailed wind and autopilot simulators</small>
               </div>
               <span className="setup-status">OPTIONAL</span>
             </li>
             <li className="setup-step">
               <span>4</span>
               <div>
-                <strong>Remote solver host</strong>
-                <small>
-                  SSH capability is detected now; credentials remain in your keychain or SSH agent
-                </small>
+                <strong>Another computer</strong>
+                <small>Optional: run large calculations on a workstation or server</small>
               </div>
               <span className="setup-status">OPTIONAL</span>
             </li>
@@ -575,9 +604,13 @@ function SetupWizard({
           <div className="setup-notice">
             <ShieldCheck size={17} />
             <span>
-              <strong>No unverified binaries are downloaded automatically.</strong> Solver
-              verification cases must pass before a backend is marked ready.
+              <strong>Aerocel Forge will not download extra programs by itself.</strong> Advanced
+              tools must pass a small test before they are shown as ready.
             </span>
+            <InfoTip label="Why this matters" align="right">
+              A found program is not always a working program. Aerocel Forge checks advanced tools
+              before trusting their results.
+            </InfoTip>
           </div>
         </div>
         <footer>
@@ -589,10 +622,10 @@ function SetupWizard({
               onOpenSettings();
             }}
           >
-            Review solver setup
+            Open advanced setup
           </button>
           <button type="button" className="button button--primary" onClick={onClose}>
-            Explore Kestrel example <ChevronRight size={16} />
+            Start with the example aircraft <ChevronRight size={16} />
           </button>
         </footer>
       </section>
@@ -627,6 +660,13 @@ export default function App() {
   const [recentErrors, setRecentErrors] = useState<readonly string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [appFullscreen, setAppFullscreen] = useState(false);
+  const [theme, setTheme] = useState<AppTheme>(readThemePreference);
+  const [advancedMode, setAdvancedMode] = useState(readAdvancedPreference);
+
+  const visibleWorkspaces = useMemo(
+    () => workspaces.filter((workspace) => advancedMode || workspace.advanced !== true),
+    [advancedMode]
+  );
 
   const activeDefinition =
     workspaces.find((workspace) => workspace.id === activeWorkspace) ??
@@ -643,6 +683,18 @@ export default function App() {
     () => runRapidAnalysis(project, analysisOptions),
     [project, analysisOptions]
   );
+
+  useEffect(() => {
+    localStorage.setItem("aerocel.theme", theme);
+  }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem("aerocel.advanced", String(advancedMode));
+    const activeIsAdvanced = workspaces.some(
+      (workspace) => workspace.id === activeWorkspace && workspace.advanced === true
+    );
+    if (!advancedMode && activeIsAdvanced) setActiveWorkspace("home");
+  }, [activeWorkspace, advancedMode]);
 
   useEffect(() => {
     let cancelled = false;
@@ -816,12 +868,24 @@ export default function App() {
     }
   };
 
+  const changeAdvancedMode = (enabled: boolean): void => {
+    setAdvancedMode(enabled);
+    setToast(
+      enabled
+        ? "Advanced tools are now visible. Technical names and settings are shown."
+        : "Simple mode is on. Your project and advanced settings were not deleted."
+    );
+  };
+
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      data-theme={theme}
+      data-experience={advancedMode ? "advanced" : "simple"}
+    >
       <header className="titlebar" data-tauri-drag-region>
         <div className="titlebar-product" data-tauri-drag-region>
           <strong>Aerocel Forge</strong>
-          <span>0.1.0 engineering workspace</span>
         </div>
         <FileMenu
           onImportModel={() => {
@@ -841,7 +905,27 @@ export default function App() {
             onClick={() => setActiveWorkspace("settings")}
           >
             <span className="mode-chip__dot" />
-            {isNativeDesktop() ? "MODE A · NATIVE MAC" : "BROWSER PREVIEW · LOCAL ONLY"}
+            {isNativeDesktop() ? "Desktop app" : "Web preview"}
+          </button>
+          <button
+            className="preference-chip"
+            type="button"
+            aria-label={`Switch to ${theme === "bright" ? "cockpit" : "bright"} theme`}
+            title={`Theme: ${theme === "bright" ? "Bright" : "Cockpit"}`}
+            onClick={() => setTheme((current) => (current === "bright" ? "cockpit" : "bright"))}
+          >
+            {theme === "bright" ? <Sun size={14} /> : <Gauge size={14} />}
+            <span>{theme === "bright" ? "Bright" : "Cockpit"}</span>
+          </button>
+          <button
+            className={`preference-chip ${advancedMode ? "preference-chip--active" : ""}`}
+            type="button"
+            aria-pressed={advancedMode}
+            title="Show or hide specialist tools"
+            onClick={() => changeAdvancedMode(!advancedMode)}
+          >
+            <SlidersHorizontal size={14} />
+            <span>{advancedMode ? "Advanced" : "Simple"}</span>
           </button>
           <div className={`save-state save-state--${saveState.status}`} title={saveState.detail}>
             <Save size={13} />
@@ -867,7 +951,7 @@ export default function App() {
           </button>
           <button className="command-trigger" type="button" onClick={() => setCommandOpen(true)}>
             <Command size={14} />
-            <span>Command</span>
+            <span>Find</span>
             <kbd>⌘K</kbd>
           </button>
         </div>
@@ -875,7 +959,11 @@ export default function App() {
       <div
         className={`workspace-shell ${navigatorOpen ? "" : "workspace-shell--navigator-hidden"}`}
       >
-        <ActivityRail active={activeWorkspace} onChange={setActiveWorkspace} />
+        <ActivityRail
+          active={activeWorkspace}
+          onChange={setActiveWorkspace}
+          items={visibleWorkspaces}
+        />
         {navigatorOpen && (
           <ComponentNavigator
             project={project}
@@ -917,6 +1005,10 @@ export default function App() {
               })
             }
             notify={setToast}
+            theme={theme}
+            setTheme={setTheme}
+            advancedMode={advancedMode}
+            setAdvancedMode={changeAdvancedMode}
           />
         </main>
       </div>
@@ -930,18 +1022,26 @@ export default function App() {
           <span>{project.vehicle.components.length} components</span>
         </button>
         <span className="status-divider" />
-        <span>
-          <strong>BODY</strong> FRD
-        </span>
-        <span>
-          <strong>WORLD</strong> NED
-        </span>
-        <span>
-          <strong>UNITS</strong> SI internal
-        </span>
+        {advancedMode ? (
+          <>
+            <span>
+              <strong>BODY</strong> FRD
+            </span>
+            <span>
+              <strong>WORLD</strong> NED
+            </span>
+            <span>
+              <strong>UNITS</strong> SI internal
+            </span>
+          </>
+        ) : (
+          <span>
+            <strong>MEASUREMENTS</strong> metres · kilograms · seconds
+          </span>
+        )}
         <span className="status-spacer" />
         <span className="status-honesty">
-          <ShieldCheck size={13} /> Preliminary example · not airworthiness certification
+          <ShieldCheck size={13} /> Early estimate · not an aircraft safety approval
         </span>
         <span className="status-divider" />
         <span>{analysis.mass.massKg.toFixed(2)} kg</span>
@@ -950,6 +1050,7 @@ export default function App() {
         open={commandOpen}
         onClose={() => setCommandOpen(false)}
         onNavigate={setActiveWorkspace}
+        items={visibleWorkspaces}
       />
       <SetupWizard
         open={setupOpen}

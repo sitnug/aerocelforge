@@ -36,6 +36,7 @@ import {
   type ImportedGeometryInspection
 } from "../lib/importers";
 import { archiveGeometrySource } from "../lib/native";
+import { InfoTip } from "./InfoTip";
 
 interface GeometryImportDialogProps {
   readonly open: boolean;
@@ -49,6 +50,7 @@ interface GeometryImportDialogProps {
     mesh: NonNullable<ImportedGeometryInspection["mesh"]>
   ) => void;
   readonly notify: (message: string) => void;
+  readonly advancedMode: boolean;
 }
 
 const UNIT_LABELS: Readonly<Record<GeometryUnit, string>> = {
@@ -94,7 +96,8 @@ export function GeometryImportDialog({
   onSelect,
   onOpenSetup,
   onGeometryAsset,
-  notify
+  notify,
+  advancedMode
 }: GeometryImportDialogProps) {
   const [format, setFormat] = useState<GeometryImportFormat>("auto");
   const [units, setUnits] = useState<GeometryUnit>("m");
@@ -254,7 +257,7 @@ export function GeometryImportDialog({
             ]
     }));
     onSelect(id);
-    notify(`${component.name} added to the assembly with source hash and geometry health.`);
+    notify(`${component.name} was added to the aircraft and checked for common 3D model problems.`);
     setSelectedFile(null);
     setResult(null);
     setComponentName("");
@@ -282,9 +285,9 @@ export function GeometryImportDialog({
       >
         <header className="import-dialog__header">
           <span>
-            <small>GEOMETRY PIPELINE</small>
-            <h2 id="geometry-import-title">Import model or component</h2>
-            <p>Select the source type, confirm units, inspect topology, then commit it.</p>
+            <small>ADD A 3D MODEL</small>
+            <h2 id="geometry-import-title">Import an aircraft or part</h2>
+            <p>Choose the file type and size units, then drop a file or pick one.</p>
           </span>
           <button
             type="button"
@@ -301,15 +304,21 @@ export function GeometryImportDialog({
           <aside className="import-setup">
             <div className="import-step-label">
               <span>01</span>
-              <strong>Source definition</strong>
+              <strong>Tell us about the file</strong>
             </div>
             <label className="import-field">
-              <span>File / model type</span>
+              <span className="inline-help-label">
+                File type
+                <InfoTip label="File type">
+                  Keep “Choose automatically” unless the file has the wrong or missing ending.
+                  Aerocel Forge still checks the file before using it.
+                </InfoTip>
+              </span>
               <select
                 value={format}
                 onChange={(event) => setFormat(event.target.value as GeometryImportFormat)}
               >
-                <option value="auto">Auto-detect from extension</option>
+                <option value="auto">Choose automatically</option>
                 {GEOMETRY_FORMATS.map((definition) => (
                   <option value={definition.id} key={definition.id}>
                     {definition.label}
@@ -318,11 +327,17 @@ export function GeometryImportDialog({
               </select>
               <small>
                 {selectedDefinition?.capability ??
-                  "A matching registered extension is required; contents are still validated."}
+                  "The file ending is used as a first clue; the contents are checked too."}
               </small>
             </label>
             <label className="import-field">
-              <span>Source coordinate units</span>
+              <span className="inline-help-label">
+                Size units used by the file
+                <InfoTip label="Size units" align="right">
+                  Some 3D files store plain numbers without saying whether they mean millimetres,
+                  metres, or inches. Choose the unit used when the model was made.
+                </InfoTip>
+              </span>
               <select
                 value={units}
                 onChange={(event) => setUnits(event.target.value as GeometryUnit)}
@@ -333,15 +348,21 @@ export function GeometryImportDialog({
                   </option>
                 ))}
               </select>
-              <small>STL and OBJ do not contain trustworthy unit metadata.</small>
+              <small>STL and OBJ files usually do not say which unit they use.</small>
             </label>
 
             <div className="import-step-label import-step-label--spaced">
               <span>02</span>
-              <strong>Assembly assignment</strong>
+              <strong>Name the new part</strong>
             </div>
             <label className="import-field">
-              <span>Semantic component type</span>
+              <span className="inline-help-label">
+                What kind of part is it?
+                <InfoTip label="Part kind">
+                  This tells the app what the shape does. For example, a wing makes lift and a
+                  battery adds weight and energy.
+                </InfoTip>
+              </span>
               <select
                 value={componentType}
                 onChange={(event) =>
@@ -365,9 +386,9 @@ export function GeometryImportDialog({
               />
             </label>
             <label className="import-field">
-              <span>Parent component</span>
+              <span>Attach it to</span>
               <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
-                <option value="">Vehicle root</option>
+                <option value="">The whole aircraft</option>
                 {project.vehicle.components.map((component) => (
                   <option value={component.id} key={component.id}>
                     {component.name}
@@ -375,24 +396,26 @@ export function GeometryImportDialog({
                 ))}
               </select>
             </label>
-            <label className="check-row">
-              <input
-                type="checkbox"
-                checked={cfdIncluded}
-                onChange={(event) => setCfdIncluded(event.target.checked)}
-              />
-              <span>
-                Include as a CFD surface
-                <small>Geometry health gates still apply before meshing.</small>
-              </span>
-            </label>
+            {advancedMode && (
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={cfdIncluded}
+                  onChange={(event) => setCfdIncluded(event.target.checked)}
+                />
+                <span>
+                  Use in detailed wind tests (CFD)
+                  <small>The model must pass 3D shape checks first.</small>
+                </span>
+              </label>
+            )}
           </aside>
 
           <main className="import-stage">
             <div
               className={`import-dropzone ${dragActive ? "import-dropzone--active" : ""} ${selectedFile !== null ? "import-dropzone--selected" : ""}`}
               role="group"
-              aria-label="Geometry file drop zone"
+              aria-label="3D model file drop zone"
               onDragEnter={(event) => {
                 event.preventDefault();
                 setDragActive(true);
@@ -427,11 +450,11 @@ export function GeometryImportDialog({
               <strong>
                 {processing
                   ? "Inspecting source…"
-                  : (selectedFile?.name ?? "Drop one geometry file here")}
+                  : (selectedFile?.name ?? "Drop one 3D model file here")}
               </strong>
               <span>
                 {selectedFile === null
-                  ? `or choose a local file · ${MAX_LOCAL_FILE_BYTES / 1024 / 1024} MB / 1M triangle limits`
+                  ? `or choose a file · up to ${MAX_LOCAL_FILE_BYTES / 1024 / 1024} MB and 1 million triangles`
                   : `${(selectedFile.size / 1024).toFixed(1)} KB · change the file if needed`}
               </span>
               <button
@@ -458,7 +481,7 @@ export function GeometryImportDialog({
               <div className="import-status import-status--adapter">
                 <Server size={18} />
                 <span>
-                  <strong>External adapter required</strong>
+                  <strong>This file needs an extra converter</strong>
                   {result.explanation}
                 </span>
                 <button type="button" className="button button--quiet" onClick={onOpenSetup}>
@@ -471,7 +494,7 @@ export function GeometryImportDialog({
               <div className="import-status import-status--adapter">
                 <Info size={18} />
                 <span>
-                  <strong>Section data inspected</strong>
+                  <strong>Shape outline checked</strong>
                   {result.explanation}
                 </span>
               </div>
@@ -492,7 +515,7 @@ export function GeometryImportDialog({
                 <header>
                   <span>
                     <CheckCircle2 size={17} />
-                    <strong>Local inspection complete</strong>
+                    <strong>3D model check complete</strong>
                   </span>
                   <span
                     className={`badge badge--${result.inspection.status === "pass" ? "success" : "warning"}`}
@@ -502,7 +525,7 @@ export function GeometryImportDialog({
                 </header>
                 <div className="import-inspection__metrics">
                   <span>
-                    <small>Bounding box · metres</small>
+                    <small>Overall size · metres</small>
                     <strong>
                       {result.inspection.boundingBoxM
                         .map((value) => value.toPrecision(4))
@@ -517,22 +540,22 @@ export function GeometryImportDialog({
                     </strong>
                   </span>
                   <span>
-                    <small>Topology</small>
+                    <small>Closed shape check</small>
                     <strong>
                       {result.inspection.watertight
-                        ? "Watertight"
-                        : `${result.inspection.openEdgeCount} open edges`}
+                        ? "Closed with no holes"
+                        : `${result.inspection.openEdgeCount} open model edges`}
                     </strong>
                   </span>
                   <span>
-                    <small>Bodies / minimum quality</small>
+                    <small>Separate shapes / lowest triangle quality</small>
                     <strong>
                       {result.inspection.connectedBodyCount} ·{" "}
                       {result.inspection.minimumTriangleQuality.toPrecision(3)}
                     </strong>
                   </span>
                   <span>
-                    <small>Source identity</small>
+                    <small>File fingerprint</small>
                     <strong>{result.sourceSha256.slice(0, 12)}… SHA-256</strong>
                   </span>
                 </div>
@@ -548,11 +571,8 @@ export function GeometryImportDialog({
                     onChange={(event) => setScaleConfirmed(event.target.checked)}
                   />
                   <span>
-                    <strong>I confirm these dimensions and source axes.</strong>
-                    <small>
-                      Imported axes become component-local body FRD. Alignment can be edited after
-                      import.
-                    </small>
+                    <strong>I checked the size and direction of this model.</strong>
+                    <small>You can move and turn the part after importing it.</small>
                   </span>
                 </label>
               </section>
@@ -562,8 +582,8 @@ export function GeometryImportDialog({
 
         <footer className="import-dialog__footer">
           <span>
-            <ShieldCheck size={14} /> Original file content is never executed. SHA-256 identifies
-            this import.
+            <ShieldCheck size={14} /> The model file is read as data, never run as a program. A
+            fingerprint records exactly which file was used.
           </span>
           <div>
             <button
@@ -581,7 +601,7 @@ export function GeometryImportDialog({
               onClick={() => void commitImport()}
             >
               {committing ? <LoaderCircle className="spin" size={15} /> : <Box size={15} />}
-              {committing ? "Archiving source…" : "Add to assembly"}
+              {committing ? "Saving model…" : "Add to aircraft"}
             </button>
           </div>
         </footer>

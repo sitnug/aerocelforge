@@ -37,6 +37,7 @@ import {
   type ProgramCompileResult
 } from "../lib/flightSimulator";
 import { AircraftViewport, type ViewportOptions } from "./AircraftViewport";
+import { InfoTip } from "./InfoTip";
 
 interface FlightLabProps {
   readonly project: AerocelProject;
@@ -47,6 +48,7 @@ interface FlightLabProps {
   readonly viewportOptions: ViewportOptions;
   readonly geometryAssets: ReadonlyMap<string, TriangleMesh>;
   readonly notify: (message: string) => void;
+  readonly advancedMode: boolean;
 }
 
 const DEFAULT_PROGRAM = `# Kestrel autonomous survey circuit
@@ -476,13 +478,19 @@ export function FlightLab(props: FlightLabProps) {
     <div className="scroll-workspace flight-lab">
       <header className="workspace-header flight-lab__header">
         <div>
-          <small>INTERACTIVE FLIGHT LAB</small>
-          <h1>Fly the actual {props.project.vehicle.name} model</h1>
-          <p>
-            Live nonlinear 6-DOF flight with RC sticks, keyboard or gamepad input, hybrid-motor
-            tilt, autopilot targets, executable mission behavior, wind, battery use, and replayable
-            fixed time steps.
-          </p>
+          <small>FLIGHT SIMULATOR</small>
+          <h1>Fly your {props.project.vehicle.name} model</h1>
+          <div className="workspace-header__description">
+            <p>
+              Use the on-screen remote, keyboard, or gamepad. You can also set automatic targets or
+              write a simple route program.
+            </p>
+            <InfoTip label="What this simulator does">
+              It calculates the aircraft’s movement, airflow forces, motor thrust, wind, and battery
+              use many times per second. It is useful for learning and early design work, but it is
+              not proof that a real aircraft will fly safely.
+            </InfoTip>
+          </div>
         </div>
         <div className="workspace-actions">
           <span className={`flight-phase flight-phase--${displayedPhase}`}>{displayedPhase}</span>
@@ -614,8 +622,12 @@ export function FlightLab(props: FlightLabProps) {
             <span>+30</span>
           </div>
           <div className="flight-hud flight-hud--bottom">
-            <span>α {((telemetry.angleOfAttackRad * 180) / Math.PI).toFixed(1)}°</span>
-            <span>β {((telemetry.sideslipRad * 180) / Math.PI).toFixed(1)}°</span>
+            {props.advancedMode && (
+              <>
+                <span>α {((telemetry.angleOfAttackRad * 180) / Math.PI).toFixed(1)}°</span>
+                <span>β {((telemetry.sideslipRad * 180) / Math.PI).toFixed(1)}°</span>
+              </>
+            )}
             <span>{telemetry.loadFactor.toFixed(2)} g</span>
             <span>{telemetry.powerW.toFixed(0)} W</span>
             <span>TILT {((flight.motorTiltRad * 180) / Math.PI).toFixed(0)}°</span>
@@ -628,9 +640,10 @@ export function FlightLab(props: FlightLabProps) {
         <div className="notice notice--warning flight-envelope-warning">
           <AlertTriangle size={17} />
           <span>
-            <strong>Outside the calibrated preliminary envelope</strong>
+            <strong>The quick flight model is outside its reliable range</strong>
             <p>
-              Reduce angle of attack, sideslip, or load factor. Post-stall truth is not claimed.
+              Ease the controls and reduce the turn or climb. Behaviour after a stall is only a
+              rough approximation.
             </p>
           </span>
         </div>
@@ -640,10 +653,10 @@ export function FlightLab(props: FlightLabProps) {
         <div className="notice notice--warning flight-envelope-warning">
           <AlertTriangle size={17} />
           <span>
-            <strong>Configured propulsion cannot sustain hover</strong>
+            <strong>The selected motors cannot hold this weight in a hover</strong>
             <p>
-              Aggregate P2 thrust is below vehicle weight at the current RPM, atmosphere, and
-              battery limit. Increase verified propulsion capability or use a cruise start.
+              Estimated total thrust is lower than the aircraft’s weight. Use a tested stronger
+              power system, reduce weight, or start in cruise.
             </p>
           </span>
         </div>
@@ -654,7 +667,13 @@ export function FlightLab(props: FlightLabProps) {
           <div className="section-card__header">
             <span>
               <small>REMOTE CONTROL</small>
-              <h2>RC Mode 2</h2>
+              <h2 className="heading-with-help">
+                On-screen remote
+                <InfoTip label="Remote layout">
+                  This uses the common “Mode 2” layout: the left stick controls power and turning;
+                  the right stick controls nose up/down and banking left/right.
+                </InfoTip>
+              </h2>
             </span>
             <span className={gamepadName === null ? "remote-link" : "remote-link is-connected"}>
               <Gamepad2 size={14} /> {gamepadName === null ? "Awaiting gamepad" : "Gamepad live"}
@@ -730,8 +749,14 @@ export function FlightLab(props: FlightLabProps) {
         <section className="section-card autopilot-panel">
           <div className="section-card__header">
             <span>
-              <small>AUTOPILOT TARGETS</small>
-              <h2>Closed-loop behavior</h2>
+              <small>AUTOMATIC FLIGHT</small>
+              <h2 className="heading-with-help">
+                Automatic flight targets
+                <InfoTip label="Automatic targets" align="right">
+                  Choose the height, speed, and direction you want. The built-in practice controller
+                  moves the virtual controls to try to reach them.
+                </InfoTip>
+              </h2>
             </span>
             <span className="controller-source">
               <Gauge size={14} /> {flight.appliedControls.source}
@@ -810,8 +835,15 @@ export function FlightLab(props: FlightLabProps) {
         <section className="section-card behavior-panel">
           <div className="section-card__header">
             <span>
-              <small>BEHAVIOR PROGRAM</small>
-              <h2>Safe mission DSL</h2>
+              <small>PROGRAM A ROUTE</small>
+              <h2 className="heading-with-help">
+                Write a simple flight plan
+                <InfoTip label="Flight plan language">
+                  Each line is one safe simulator command. For example, ALTITUDE 40 asks for 40
+                  metres and WAYPOINT 120 0 40 adds a route point. It cannot run general computer
+                  code.
+                </InfoTip>
+              </h2>
             </span>
             <Braces size={18} />
           </div>
@@ -868,7 +900,7 @@ export function FlightLab(props: FlightLabProps) {
                 props.notify("Program loaded. Press Fly to execute the mission.");
               }}
             >
-              <Send size={15} /> Load & arm
+              <Send size={15} /> Load into simulator
             </button>
           </div>
           <p className="control-hint">
@@ -880,8 +912,14 @@ export function FlightLab(props: FlightLabProps) {
         <section className="section-card flight-telemetry-panel">
           <div className="section-card__header">
             <span>
-              <small>LIVE ENGINEERING DATA</small>
-              <h2>Forces, energy & position</h2>
+              <small>LIVE FLIGHT NUMBERS</small>
+              <h2 className="heading-with-help">
+                Forces, battery, and position
+                <InfoTip label="Live flight numbers" align="right">
+                  Lift pushes the aircraft up, drag slows it down, and thrust comes from the
+                  propellers. Current shows how quickly electrical energy is being used.
+                </InfoTip>
+              </h2>
             </span>
             <Wind size={18} />
           </div>
@@ -922,10 +960,9 @@ export function FlightLab(props: FlightLabProps) {
           <div className="flight-model-note">
             <Battery size={15} />
             <p>
-              A1 attached-flow aerodynamics, the current aggregate P2 propulsion point and battery
-              limit, simplified control derivatives and differential-thrust moments drive the tested
-              6-DOF core. Use PX4 SITL/HIL and calibrated multidimensional polars before real-flight
-              decisions.
+              This is a quick six-direction flight model built from the current aircraft, motor, and
+              battery estimates. Use a real autopilot simulator and measured aircraft data before
+              making real-flight decisions.
             </p>
           </div>
         </section>

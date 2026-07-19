@@ -2,26 +2,34 @@
 
 ## Start with Kestrel
 
-Launch the native app with `npm run desktop`. On first run, inspect the detected
-capabilities and choose **Explore Kestrel example**. The example is designed to
-exercise every workspace; its numbers are illustrative, not measured.
+Launch the native app with `npm run desktop`. On first run, choose **Start with
+the example aircraft**. The example is designed to exercise every workspace; its
+numbers are illustrative, not measured.
 
-The activity rail follows an engineering workflow: Home, Geometry, Components,
-Mass, Propulsion, Rapid Aero, CFD, Flight, Transition, PX4, Mission,
-Optimization, Results, Validation, Reports, and Settings. `Cmd+K` opens workspace
-navigation. Autosave status and selected result quality remain visible in the
-bottom status bar.
+Aerocel Forge starts in **Simple** mode. The activity rail uses plain names: Home,
+3D model, Parts, Weight, Power, Airflow, Fly, Transition, Route, Results, Reports,
+and Settings. Turn on **Advanced** in the top bar or Settings to add detailed wind
+tests (CFD), the PX4 autopilot simulator, design searches, and engineering checks.
+Turning Advanced off hides these screens but does not remove their settings or
+results. `Cmd+K` opens screen navigation.
+
+The default **Bright** theme uses a light background, dark words, and high-contrast
+buttons. **Cockpit** uses dark panels with green and amber details. Choose either
+theme from the top bar or Settings. Small `i` controls explain unfamiliar terms in
+plain language; hover, focus, or click them to open the help card. Theme and skill
+level choices are saved on this computer and never change the aircraft model.
 
 ## Geometry and components
 
-Use Geometry and choose **Import model**. Select the model type explicitly or use
-extension auto-detection, select source units, assign a semantic component type,
-name, parent, and CFD inclusion, then either choose one local file or drag it onto
-the drop zone. The file extension must match the selected type.
+Use **3D model** and choose **Import model**, or use **File → Import model**.
+Select the file type explicitly or keep **Choose automatically**, choose the size
+units, tell Aerocel Forge what kind of part it is, and then choose one local file
+or drag it onto the drop zone. Advanced mode also shows CFD inclusion. The file
+extension must match the selected type.
 
 Built-in 3D import supports ASCII/binary STL, OBJ, self-contained glTF/GLB, PLY,
 and embedded-geometry DAE. Confirm the metre bounding box and source axes before
-**Add to assembly** is enabled. Imported geometry is shown in the viewport and
+**Add to aircraft** is enabled. Imported geometry is shown in the viewport and
 can be translated, rotated, non-uniformly scaled, reparented, retyped, or excluded
 from CFD in the inspector. The untouched source is archived by SHA-256 and is
 restored with the project at startup.

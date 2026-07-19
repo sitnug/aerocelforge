@@ -9,7 +9,7 @@ describe("solver adapter command safety", () => {
         {
           id: "job",
           solverId: "openfoam",
-          adapterVersion: "0.1.0",
+          adapterVersion: "1.0.0",
           executionMode: "local_linux",
           resourceClass: "heavy",
           inputHash: "hash",

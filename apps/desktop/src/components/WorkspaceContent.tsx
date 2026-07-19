@@ -50,6 +50,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Sun,
   Terminal,
   Trash2,
   Upload,
@@ -59,10 +60,12 @@ import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { WorkspaceId } from "../App";
 import type { AnalysisOptions, RapidAnalysis } from "../lib/analysis";
 import { createDiagnosticBundle, hashText, writeReport, type SystemProfile } from "../lib/native";
+import type { AppTheme } from "../lib/preferences";
 import { AircraftViewport, type ViewportOptions } from "./AircraftViewport";
 import { EngineeringPlot } from "./EngineeringPlot";
 import { FlightLab } from "./FlightLab";
 import { GeometryImportDialog } from "./GeometryImportDialog";
+import { InfoTip } from "./InfoTip";
 
 interface WorkspaceContentProps {
   readonly workspace: WorkspaceId;
@@ -87,9 +90,42 @@ interface WorkspaceContentProps {
   readonly geometryAssets: ReadonlyMap<string, TriangleMesh>;
   readonly onGeometryAsset: (sourceSha256: string, mesh: TriangleMesh) => void;
   readonly notify: (message: string) => void;
+  readonly theme: AppTheme;
+  readonly setTheme: (theme: AppTheme) => void;
+  readonly advancedMode: boolean;
+  readonly setAdvancedMode: (enabled: boolean) => void;
 }
 
 type Tone = "neutral" | "success" | "warning" | "danger" | "accent";
+
+const METRIC_HELP: Readonly<Record<string, string>> = {
+  "TOTAL MASS": "The combined weight of every part that has a mass value.",
+  "TAKEOFF MASS": "The estimated aircraft weight at the start of the flight.",
+  "CG · X": "How far forward or backward the aircraft’s balance point is.",
+  "CG · Y": "How far right or left the aircraft’s balance point is.",
+  "CG · Z": "How far down or up the aircraft’s balance point is.",
+  "REFERENCE AREA": "The main wing area used by the airflow calculations.",
+  "THRUST / UNIT": "The estimated push from one motor and propeller unit.",
+  "SHAFT POWER": "Mechanical power delivered by the motor to the propeller.",
+  "BUS VOLTAGE": "The battery voltage available to the motors while they are drawing power.",
+  "LIFT COEFFICIENT": "A unit-free number that describes how strongly the wing makes lift.",
+  "DRAG COEFFICIENT": "A unit-free number that describes how strongly air slows the aircraft.",
+  "LIFT / DRAG": "Lift divided by drag. A higher number usually means a more efficient glide.",
+  "BEST GLIDE":
+    "The speed and condition where the estimate gives the greatest distance per metre of height lost.",
+  "FINAL AIRSPEED": "The aircraft’s estimated speed at the end of this simulation.",
+  "ALTITUDE LOSS": "How much height the aircraft loses during the simulated change to wing flight.",
+  "PEAK POWER": "The highest electrical or mechanical power used during the simulated case.",
+  "STALL MARGIN":
+    "How far the aircraft is from the estimated point where smooth wing lift breaks down.",
+  "CRUISE POWER": "The estimated continuous power needed for level forward flight.",
+  ENDURANCE: "The estimated time the aircraft can stay in the air with the selected battery.",
+  FEASIBLE: "Designs that meet every limit currently selected for this study.",
+  "PARETO SET":
+    "Strong trade-off choices where one goal cannot improve without making another worse.",
+  "SOLVER QUALITY":
+    "Whether the numerical calculation settled to a consistent answer. This does not prove the model matches reality."
+};
 
 function Badge({
   children,
@@ -105,11 +141,13 @@ function WorkspaceHeader({
   eyebrow,
   title,
   description,
+  help,
   actions
 }: {
   readonly eyebrow: string;
   readonly title: string;
   readonly description: string;
+  readonly help: string;
   readonly actions?: React.ReactNode;
 }) {
   return (
@@ -117,7 +155,10 @@ function WorkspaceHeader({
       <div>
         <small>{eyebrow}</small>
         <h1>{title}</h1>
-        <p>{description}</p>
+        <div className="workspace-header__description">
+          <p>{description}</p>
+          <InfoTip label={`About ${title}`}>{help}</InfoTip>
+        </div>
       </div>
       {actions !== undefined && <div className="workspace-actions">{actions}</div>}
     </header>
@@ -141,7 +182,10 @@ function MetricCard({
 }) {
   return (
     <article className={`metric-card metric-card--${tone}`}>
-      <small>{label}</small>
+      <span className="metric-card__label">
+        <small>{label}</small>
+        {METRIC_HELP[label] !== undefined && <InfoTip label={label}>{METRIC_HELP[label]}</InfoTip>}
+      </span>
       <strong>
         {value}
         {unit !== undefined && <em>{unit}</em>}
@@ -311,7 +355,8 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               type="button"
               className={`icon-button ${props.viewportOptions.orthographic ? "icon-button--active" : ""}`}
               onClick={() => toggleViewport("orthographic")}
-              title="Toggle orthographic camera"
+              title="Switch between flat technical view and natural 3D view"
+              aria-label="Switch camera view"
             >
               <Orbit size={16} />
             </button>
@@ -319,7 +364,8 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               type="button"
               className={`icon-button ${props.viewportOptions.showGrid ? "icon-button--active" : ""}`}
               onClick={() => toggleViewport("showGrid")}
-              title="Toggle reference grid"
+              title="Show or hide the size grid"
+              aria-label="Show or hide grid"
             >
               <Grid3X3 size={16} />
             </button>
@@ -327,7 +373,8 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               type="button"
               className={`icon-button ${props.viewportOptions.showAxes ? "icon-button--active" : ""}`}
               onClick={() => toggleViewport("showAxes")}
-              title="Toggle coordinate axes"
+              title="Show or hide direction arrows"
+              aria-label="Show or hide direction arrows"
             >
               <Axis3D size={16} />
             </button>
@@ -335,7 +382,8 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               type="button"
               className={`icon-button ${props.viewportOptions.exploded ? "icon-button--active" : ""}`}
               onClick={() => toggleViewport("exploded")}
-              title="Toggle exploded assembly"
+              title="Spread parts apart or put them back together"
+              aria-label="Spread parts apart"
             >
               <Maximize2 size={16} />
             </button>
@@ -343,7 +391,8 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               type="button"
               className={`icon-button ${props.viewportOptions.showSlipstream ? "icon-button--active" : ""}`}
               onClick={() => toggleViewport("showSlipstream")}
-              title="Toggle estimated slipstreams"
+              title="Show or hide estimated air pushed by the propellers"
+              aria-label="Show or hide propeller airflow"
             >
               <Wind size={16} />
             </button>
@@ -360,14 +409,14 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             geometryAssets={props.geometryAssets}
           />
           <div className="viewport-frame-badge">
-            <strong>BODY · FRD</strong>
-            <span>+X forward · +Y right · +Z down</span>
+            <strong>{props.advancedMode ? "BODY · FRD" : "AIRCRAFT DIRECTIONS"}</strong>
+            <span>Forward · right · down</span>
           </div>
           <div className="viewport-quality">
             <span className="quality-light quality-light--warning" />
             <div>
               <strong>Example geometry</strong>
-              <small>Procedural · no source CAD</small>
+              <small>Built-in sample · not measured from a real aircraft</small>
             </div>
           </div>
           <div className="view-cube" aria-hidden="true">
@@ -378,18 +427,18 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
         </div>
         <div className="viewport-footer">
           <span>
-            <Eye size={13} /> Perspective engineering view
+            <Eye size={13} /> 3D view
           </span>
           <span>
             CG {props.analysis.mass.centerOfGravityM.map((value) => value.toFixed(3)).join(", ")} m
           </span>
-          <span>Orbit: drag · Pan: shift-drag · Zoom: pinch</span>
+          <span>Turn: drag · Move: shift-drag · Zoom: pinch or scroll</span>
         </div>
       </section>
       <aside className="inspector-panel">
         <div className="inspector-header">
           <span>
-            <small>INSPECTOR</small>
+            <small>SELECTED PART</small>
             <strong>{selected?.name ?? "Nothing selected"}</strong>
           </span>
           <Badge tone={selected?.geometry.health.status === "pass" ? "success" : "warning"}>
@@ -399,7 +448,13 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
         {selected !== null ? (
           <>
             <section className="inspector-section">
-              <h3>Semantic assignment</h3>
+              <h3 className="heading-with-help">
+                What this part is
+                <InfoTip label="Part type">
+                  Choose the real job of this shape, such as a wing, body, motor, or battery. This
+                  lets calculations treat it correctly.
+                </InfoTip>
+              </h3>
               <div className="readout-field">
                 <label htmlFor="inspector-component-type">Type</label>
                 <select
@@ -443,25 +498,39 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                     ))}
                 </select>
               </div>
-              <div className="readout-field">
-                <span>CFD surface</span>
-                <label className="compact-toggle">
-                  <input
-                    type="checkbox"
-                    checked={selected.cfdIncluded}
-                    onChange={(event) =>
-                      updateSelected((component) => ({
-                        ...component,
-                        cfdIncluded: event.target.checked
-                      }))
-                    }
-                  />
-                  {selected.cfdIncluded ? "Included" : "Excluded"}
-                </label>
-              </div>
+              {props.advancedMode && (
+                <div className="readout-field">
+                  <span className="inline-help-label">
+                    CFD surface
+                    <InfoTip label="CFD surface" align="right">
+                      Include this shape in a detailed computer wind test. Leave it out for helper
+                      objects that air should pass through.
+                    </InfoTip>
+                  </span>
+                  <label className="compact-toggle">
+                    <input
+                      type="checkbox"
+                      checked={selected.cfdIncluded}
+                      onChange={(event) =>
+                        updateSelected((component) => ({
+                          ...component,
+                          cfdIncluded: event.target.checked
+                        }))
+                      }
+                    />
+                    {selected.cfdIncluded ? "Included" : "Excluded"}
+                  </label>
+                </div>
+              )}
             </section>
             <section className="inspector-section">
-              <h3>Translation · body FRD metres</h3>
+              <h3 className="heading-with-help">
+                Position on aircraft · metres
+                <InfoTip label="Position numbers" align="right">
+                  X moves the part forward or backward, Y moves it right or left, and Z moves it
+                  down or up. Negative numbers move in the opposite direction.
+                </InfoTip>
+              </h3>
               <div className="vector-fields">
                 <label>
                   X
@@ -497,7 +566,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                   />
                 </label>
               </div>
-              <h3 className="transform-subheading">Rotation · degrees displayed</h3>
+              <h3 className="transform-subheading">Turn · degrees</h3>
               <div className="vector-fields">
                 {(
                   [
@@ -519,32 +588,36 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                   </label>
                 ))}
               </div>
-              <h3 className="transform-subheading">Non-uniform scale</h3>
-              <div className="vector-fields">
-                {(
-                  [
-                    ["X", 0],
-                    ["Y", 1],
-                    ["Z", 2]
-                  ] as const
-                ).map(([label, axis]) => (
-                  <label key={label}>
-                    {label}
-                    <input
-                      type="number"
-                      min="0.0001"
-                      step="0.01"
-                      value={selected.transform.scale[axis]}
-                      onChange={(event) =>
-                        updateTransformVector("scale", axis, event.target.valueAsNumber)
-                      }
-                    />
-                  </label>
-                ))}
-              </div>
-              <small className="section-help">
-                Rotation is stored in radians. Display conversion never changes project data.
-              </small>
+              {props.advancedMode && (
+                <>
+                  <h3 className="transform-subheading">Separate size scale for each direction</h3>
+                  <div className="vector-fields">
+                    {(
+                      [
+                        ["X", 0],
+                        ["Y", 1],
+                        ["Z", 2]
+                      ] as const
+                    ).map(([label, axis]) => (
+                      <label key={label}>
+                        {label}
+                        <input
+                          type="number"
+                          min="0.0001"
+                          step="0.01"
+                          value={selected.transform.scale[axis]}
+                          onChange={(event) =>
+                            updateTransformVector("scale", axis, event.target.valueAsNumber)
+                          }
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <small className="section-help">
+                    Angles are saved in radians and shown here as degrees.
+                  </small>
+                </>
+              )}
             </section>
             <section className="inspector-section">
               <h3>Geometry source</h3>
@@ -571,7 +644,13 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               </div>
             </section>
             <section className="inspector-section">
-              <h3>Geometry health</h3>
+              <h3 className="heading-with-help">
+                3D model checks
+                <InfoTip label="3D model checks" align="right">
+                  These checks look for holes, broken joins, inside-out faces, and shapes that pass
+                  through themselves. Problems can make weight or wind calculations wrong.
+                </InfoTip>
+              </h3>
               {selected.geometry.health.notes.map((note) => (
                 <p className="inspection-note" key={note}>
                   <Info size={13} />
@@ -615,6 +694,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
         onOpenSetup={props.onOpenSetup}
         onGeometryAsset={props.onGeometryAsset}
         notify={props.notify}
+        advancedMode={props.advancedMode}
       />
     </div>
   );
@@ -630,9 +710,10 @@ function HomeWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="PROJECT OVERVIEW"
+        eyebrow="PROJECT HOME"
         title={props.project.name}
-        description="A single engineering record from geometry through flight-model evidence."
+        description="See what is ready, what needs attention, and where to go next."
+        help="This page brings together your aircraft shape, parts, weight, calculations, warnings, and saved results."
         actions={
           <>
             <button
@@ -646,7 +727,7 @@ function HomeWorkspace(props: WorkspaceContentProps) {
                 props.notify("Immutable project snapshot downloaded with the current revision.");
               }}
             >
-              <GitBranch size={15} /> Snapshot revision
+              <GitBranch size={15} /> Download a copy
             </button>
             <button
               className="button button--primary"
@@ -793,9 +874,10 @@ function ComponentsWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="VEHICLE DEFINITION"
-        title="Components & articulated joints"
-        description="Semantic bodies, parent relationships, control assignments, and independent tilt kinematics."
+        eyebrow="AIRCRAFT PARTS"
+        title="Parts and movement"
+        description="Name each part, connect it to the aircraft, and set how moving parts turn."
+        help="A part can be a wing, body, motor, propeller, battery, sensor, or moving joint. Connecting parts makes them move together correctly."
         actions={
           <button
             type="button"
@@ -813,8 +895,8 @@ function ComponentsWorkspace(props: WorkspaceContentProps) {
         <section className="section-card">
           <div className="section-card__header">
             <span>
-              <small>ASSEMBLY</small>
-              <h2>{props.project.vehicle.components.length} semantic components</h2>
+              <small>AIRCRAFT PARTS</small>
+              <h2>{props.project.vehicle.components.length} named parts</h2>
             </span>
             <Badge tone="success">Schema valid</Badge>
           </div>
@@ -914,9 +996,10 @@ function MassWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="MATERIALS & MASS"
-        title="Mass properties"
-        description="SI-native aggregation with component uncertainty and the parallel-axis theorem."
+        eyebrow="WEIGHT & BALANCE"
+        title="Weight and balance"
+        description="See the aircraft’s total weight and where that weight is centred."
+        help="The balance point is also called the centre of gravity, or CG. An aircraft can be hard or impossible to control if this point is too far forward, backward, or sideways. Advanced mode shows uncertainty and inertia details."
         actions={
           <button
             type="button"
@@ -1047,9 +1130,10 @@ function PropulsionWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="PROPULSION & ELECTRICAL"
-        title="Three independent tilt units"
-        description="P0/P1/P2 models, motor electrical limits, battery sag, and momentum-theory slipstream."
+        eyebrow="MOTORS & BATTERY"
+        title="Power system"
+        description="Estimate thrust, battery use, and whether the motors and electronics have enough margin."
+        help="Aerocel Forge combines the motor, propeller, speed controller, and battery data. These are estimates until you compare them with a real thrust test. Advanced mode shows the detailed calculation levels."
         actions={
           <button
             className="button button--primary"
@@ -1058,7 +1142,7 @@ function PropulsionWorkspace(props: WorkspaceContentProps) {
               props.notify("P2 BEMT operating point recomputed from the visible inputs.")
             }
           >
-            <RefreshCw size={15} /> Recompute P2
+            <RefreshCw size={15} /> Update estimate
           </button>
         }
       />
@@ -1220,9 +1304,10 @@ function AeroWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="RAPID AERODYNAMICS"
-        title="Attached-flow design point"
-        description="Finite-wing lift slope with transparent parabolic drag accounting and an explicit validity envelope."
+        eyebrow="QUICK AIRFLOW ESTIMATE"
+        title="How the aircraft may fly"
+        description="Estimate lift, drag, stall speed, and glide performance for an early design."
+        help="This is a quick maths-based estimate for smooth airflow. It is useful for comparing early designs, but it is not a detailed wind-tunnel test and it becomes less reliable near a stall."
         actions={
           <>
             <Badge tone="warning">A1 · PRELIMINARY</Badge>
@@ -1425,6 +1510,7 @@ function FlightWorkspace(props: WorkspaceContentProps) {
       viewportOptions={props.viewportOptions}
       geometryAssets={props.geometryAssets}
       notify={props.notify}
+      advancedMode={props.advancedMode}
     />
   );
 }
@@ -1436,9 +1522,10 @@ function TransitionWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="VTOL TRANSITION"
-        title="Hover-to-wingborne transition"
-        description="Reduced-order longitudinal simulation with rate-limited tilt, power, wing lift, and declared failure cases."
+        eyebrow="HOVER TO CRUISE"
+        title="Change from hovering to wing flight"
+        description="Check whether the aircraft keeps enough lift, speed, and control while its motors tilt."
+        help="VTOL means vertical takeoff and landing. This quick simulation checks the difficult middle part between hovering like a drone and flying on the wings like an airplane. It cannot prove the change will be stable in real life."
         actions={
           <>
             <Badge tone={result.completed ? "success" : "danger"}>
@@ -1637,9 +1724,10 @@ function CfdWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="CFD WIND TUNNEL"
-        title="Steady RANS case builder"
-        description="Reproducible OpenFOAM configuration with geometry gates, resource class, and convergence evidence."
+        eyebrow="ADVANCED WIND TEST · CFD"
+        title="Detailed computer wind test"
+        description="Prepare a repeatable airflow case for OpenFOAM and check whether the model is ready."
+        help="CFD uses a large number of small cells to estimate how air moves around the aircraft. RANS is one common averaged-airflow method. It needs an external OpenFOAM installation and careful result checking."
         actions={
           <>
             <Badge tone={openFoam?.available === true ? "success" : "warning"}>
@@ -1865,9 +1953,10 @@ function Px4Workspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="PX4 SITL"
-        title="Autopilot actuator mapping"
-        description="Explicit MAVLink and output mapping for an unconventional three-motor tilt vehicle."
+        eyebrow="ADVANCED AUTOPILOT SIMULATOR · PX4"
+        title="Connect controls to the PX4 simulator"
+        description="Match each virtual motor and servo to the correct autopilot output."
+        help="SITL means software-in-the-loop: the real PX4 autopilot code runs on the computer instead of a flight controller. MAVLink is the message system used to connect it to Aerocel Forge."
         actions={
           <>
             <Badge tone={px4?.available === true ? "success" : "warning"}>
@@ -2003,9 +2092,10 @@ function MissionWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="MISSION SIMULATION"
-        title="Survey mission energy budget"
-        description="Waypoint and environment configuration using preliminary performance models; terrain-world simulation needs Gazebo."
+        eyebrow="ROUTE PLANNER"
+        title="Plan a survey flight"
+        description="Set route points and estimate the time, distance, and battery needed."
+        help="A waypoint is a place the aircraft should fly to. This page makes an early battery estimate; a full 3D terrain simulation needs an external simulator such as Gazebo."
         actions={
           <button
             type="button"
@@ -2139,9 +2229,10 @@ function OptimizationWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="DESIGN STUDIES"
-        title="Span × battery trade study"
-        description="Deterministic reduced-order grid search with visible source samples, constraints, and Pareto filtering."
+        eyebrow="ADVANCED DESIGN CHOICES"
+        title="Compare wing and battery sizes"
+        description="Try many combinations and find choices that best balance range, weight, and limits."
+        help="A trade study compares many designs using the same rules. Pareto results are choices where improving one goal would make another goal worse. These are quick estimates, not final design approval."
         actions={
           <>
             <Badge tone="warning">A1 REDUCED ORDER</Badge>
@@ -2284,9 +2375,10 @@ function ResultsWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="RESULTS & COMPARISON"
-        title="Baseline evidence ledger"
-        description="Every value exposes its source, fidelity, and quality state. Missing solver results remain missing."
+        eyebrow="RESULTS"
+        title="Compare results"
+        description="See each result, where it came from, and how much trust to place in it."
+        help="Aerocel Forge keeps calculated, measured, and missing results separate. “Fidelity” means how much detail a method includes. A detailed method is not automatically correct unless it is checked."
         actions={
           <button
             className="button button--quiet"
@@ -2435,9 +2527,10 @@ function ValidationWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="VERIFICATION & VALIDATION"
-        title="Evidence, not green checks"
-        description="Analytical, regression, numerical-convergence, and experimental evidence remain separate."
+        eyebrow="ADVANCED ENGINEERING CHECKS"
+        title="What has really been checked"
+        description="Keep maths checks, software tests, solver checks, and real-world tests separate."
+        help="Verification asks whether the software solved the equations correctly. Validation asks whether those equations match the real aircraft. Passing software tests does not prove that an aircraft is safe to fly."
         actions={
           <button
             type="button"
@@ -2545,7 +2638,7 @@ function ReportsWorkspace(props: WorkspaceContentProps) {
         const html = generateEngineeringReportHtml({
           project: props.project,
           manifest: {
-            aerocelForgeVersion: "0.1.0",
+            aerocelForgeVersion: "1.0.0",
             gitCommit: "working-tree",
             operatingSystem: props.systemProfile?.operatingSystem ?? "Browser preview",
             generatedAt: new Date().toISOString(),
@@ -2614,9 +2707,10 @@ function ReportsWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="ENGINEERING REPORTS"
-        title="Reproducible project record"
-        description="Inputs, model sources, fidelity, uncertainty, warnings, and solver inventory in one export."
+        eyebrow="REPORTS"
+        title="Download an engineering report"
+        description="Put the inputs, results, sources, limits, and warnings into one clear file."
+        help="The report records enough detail for another person to understand how the result was made. It is an engineering record, not an airworthiness certificate."
         actions={
           <button
             className="button button--primary"
@@ -2782,272 +2876,364 @@ function SettingsWorkspace(props: WorkspaceContentProps) {
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
-        eyebrow="SETTINGS & SOLVER MANAGEMENT"
-        title="Execution capabilities"
-        description="Detection is not verification. Each external solver must pass a small known case before engineering use."
+        eyebrow="SETTINGS"
+        title="Appearance and calculation tools"
+        description="Choose how Aerocel Forge looks, show advanced tools, and check optional software."
+        help="Built-in features work locally. Some detailed wind, autopilot, and 3D-world simulations need separate programs. Aerocel Forge finds them, but only marks them ready after a known test works."
         actions={
           <button type="button" className="button button--primary" onClick={props.onOpenSetup}>
             <Sparkles size={15} /> Open setup wizard
           </button>
         }
       />
-      <div className="system-profile">
-        <div>
-          <small>HOST PLATFORM</small>
-          <strong>{props.systemProfile?.operatingSystem ?? "Detecting…"}</strong>
-          <span>
-            {props.systemProfile?.architecture ?? "—"} ·{" "}
-            {props.systemProfile === null || props.systemProfile.memoryGb === 0
-              ? "Memory unavailable"
-              : `${props.systemProfile.memoryGb.toFixed(0)} GB memory`}{" "}
-            ·{" "}
-            {props.systemProfile === null || props.systemProfile.availableDiskGb === 0
-              ? "Disk unavailable"
-              : `${props.systemProfile.availableDiskGb.toFixed(0)} GB free`}
-          </span>
-        </div>
-        <Badge tone="accent">MODE A ACTIVE</Badge>
-      </div>
-      <div className="execution-modes">
-        {modes.map((mode, index) => (
-          <article
-            key={mode.id}
-            className={index === 0 ? "execution-mode execution-mode--active" : "execution-mode"}
-          >
-            <span>{index + 1}</span>
-            <div>
-              <strong>{mode.label}</strong>
-              <small>{mode.detail}</small>
-            </div>
-            {index === 0 ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}
-          </article>
-        ))}
-      </div>
-      <section className="section-card">
+      <section className="section-card preference-panel">
         <div className="section-card__header">
           <span>
-            <small>CAPABILITY DETECTOR</small>
-            <h2>Installed engineering tools</h2>
+            <small>YOUR VIEW</small>
+            <h2>Make the app comfortable for you</h2>
           </span>
-          <button
-            type="button"
-            className="button button--quiet"
-            onClick={() => window.location.reload()}
-          >
-            <RefreshCw size={14} /> Refresh
-          </button>
+          <InfoTip label="These choices are safe">
+            Changing the theme or turning advanced tools on and off does not change your aircraft or
+            delete any saved work.
+          </InfoTip>
         </div>
-        <div className="capability-grid">
-          {props.systemProfile?.capabilities.map((capability) => (
-            <article
-              key={capability.id}
-              className={capability.available ? "capability capability--available" : "capability"}
+        <div className="preference-groups">
+          <fieldset className="preference-group">
+            <legend>Theme</legend>
+            <button
+              type="button"
+              className={`preference-card ${props.theme === "bright" ? "preference-card--active" : ""}`}
+              aria-pressed={props.theme === "bright"}
+              onClick={() => props.setTheme("bright")}
             >
-              <div className="capability-icon">
-                {capability.mode === "native_mac" ? (
-                  <Cpu size={18} />
-                ) : capability.mode === "local_linux" ? (
-                  <Server size={18} />
-                ) : (
-                  <Terminal size={18} />
-                )}
-              </div>
+              <Sun size={20} />
               <span>
-                <strong>{capability.name}</strong>
-                <small>{capability.version ?? capability.reason}</small>
+                <strong>Bright</strong>
+                <small>Light background, dark words, bright buttons</small>
               </span>
-              <Badge tone={capability.available ? "success" : "neutral"}>
-                {capability.available ? "Detected" : "Unavailable"}
-              </Badge>
-            </article>
-          )) ?? <p className="loading-copy">Inspecting local tools…</p>}
+              <Badge tone="accent">Recommended</Badge>
+            </button>
+            <button
+              type="button"
+              className={`preference-card ${props.theme === "cockpit" ? "preference-card--active" : ""}`}
+              aria-pressed={props.theme === "cockpit"}
+              onClick={() => props.setTheme("cockpit")}
+            >
+              <Gauge size={20} />
+              <span>
+                <strong>Cockpit</strong>
+                <small>Dark panels with glowing green and amber details</small>
+              </span>
+            </button>
+          </fieldset>
+          <fieldset className="preference-group">
+            <legend>Skill level</legend>
+            <button
+              type="button"
+              className={`preference-card ${!props.advancedMode ? "preference-card--active" : ""}`}
+              aria-pressed={!props.advancedMode}
+              onClick={() => props.setAdvancedMode(false)}
+            >
+              <Sparkles size={20} />
+              <span>
+                <strong>Simple</strong>
+                <small>Plain words and the tools most people need first</small>
+              </span>
+              <Badge tone="accent">Recommended</Badge>
+            </button>
+            <button
+              type="button"
+              className={`preference-card ${props.advancedMode ? "preference-card--active" : ""}`}
+              aria-pressed={props.advancedMode}
+              onClick={() => props.setAdvancedMode(true)}
+            >
+              <SlidersHorizontal size={20} />
+              <span>
+                <strong>Advanced</strong>
+                <small>CFD, PX4, design search, detailed checks, and technical settings</small>
+              </span>
+            </button>
+          </fieldset>
         </div>
       </section>
-      <div className="split-layout">
+      {!props.advancedMode && (
+        <Notice tone="info" title="Advanced tools are hidden, not removed">
+          Turn on Advanced above whenever you need detailed wind tests, the PX4 simulator, design
+          searches, or external calculation-tool setup.
+        </Notice>
+      )}
+      <div
+        className={
+          props.advancedMode ? "advanced-settings" : "advanced-settings advanced-settings--hidden"
+        }
+      >
+        <div className="system-profile">
+          <div>
+            <small>HOST PLATFORM</small>
+            <strong>{props.systemProfile?.operatingSystem ?? "Detecting…"}</strong>
+            <span>
+              {props.systemProfile?.architecture ?? "—"} ·{" "}
+              {props.systemProfile === null || props.systemProfile.memoryGb === 0
+                ? "Memory unavailable"
+                : `${props.systemProfile.memoryGb.toFixed(0)} GB memory`}{" "}
+              ·{" "}
+              {props.systemProfile === null || props.systemProfile.availableDiskGb === 0
+                ? "Disk unavailable"
+                : `${props.systemProfile.availableDiskGb.toFixed(0)} GB free`}
+            </span>
+          </div>
+          <Badge tone="accent">MODE A ACTIVE</Badge>
+        </div>
+        <div className="execution-modes">
+          {modes.map((mode, index) => (
+            <article
+              key={mode.id}
+              className={index === 0 ? "execution-mode execution-mode--active" : "execution-mode"}
+            >
+              <span>{index + 1}</span>
+              <div>
+                <strong>{mode.label}</strong>
+                <small>{mode.detail}</small>
+              </div>
+              {index === 0 ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}
+            </article>
+          ))}
+        </div>
         <section className="section-card">
           <div className="section-card__header">
             <span>
-              <small>REMOTE RUNNER</small>
-              <h2>SSH hosts</h2>
+              <small>CAPABILITY DETECTOR</small>
+              <h2>Installed engineering tools</h2>
             </span>
-            <LockKeyhole size={18} />
+            <button
+              type="button"
+              className="button button--quiet"
+              onClick={() => window.location.reload()}
+            >
+              <RefreshCw size={14} /> Refresh
+            </button>
           </div>
-          {hostProfiles.length === 0 && !hostEditorOpen && (
-            <div className="empty-state">
-              <Server size={28} />
-              <strong>No remote solver host configured</strong>
-              <p>
-                Keys stay in the SSH agent or user keychain. Private key material is never stored
-                inside a project.
-              </p>
-              <button
-                className="button button--quiet"
-                type="button"
-                onClick={() => setHostEditorOpen(true)}
+          <div className="capability-grid">
+            {props.systemProfile?.capabilities.map((capability) => (
+              <article
+                key={capability.id}
+                className={capability.available ? "capability capability--available" : "capability"}
               >
-                <Plus size={15} /> Add host profile
-              </button>
+                <div className="capability-icon">
+                  {capability.mode === "native_mac" ? (
+                    <Cpu size={18} />
+                  ) : capability.mode === "local_linux" ? (
+                    <Server size={18} />
+                  ) : (
+                    <Terminal size={18} />
+                  )}
+                </div>
+                <span>
+                  <strong>{capability.name}</strong>
+                  <small>{capability.version ?? capability.reason}</small>
+                </span>
+                <Badge tone={capability.available ? "success" : "neutral"}>
+                  {capability.available ? "Detected" : "Unavailable"}
+                </Badge>
+              </article>
+            )) ?? <p className="loading-copy">Inspecting local tools…</p>}
+          </div>
+        </section>
+        <div className="split-layout">
+          <section className="section-card">
+            <div className="section-card__header">
+              <span>
+                <small>REMOTE RUNNER</small>
+                <h2>SSH hosts</h2>
+              </span>
+              <LockKeyhole size={18} />
             </div>
-          )}
-          {hostProfiles.length > 0 && !hostEditorOpen && (
-            <div className="remote-profile-list">
-              {hostProfiles.map((profile) => (
-                <article className="remote-profile" key={profile.id}>
-                  <Server size={17} />
-                  <span>
-                    <strong>{profile.displayName}</strong>
-                    <small>
-                      {profile.username}@{profile.hostname}:{profile.port} · {profile.scheduler}
-                    </small>
-                  </span>
-                  <Badge tone={validateRemoteHost(profile).length === 0 ? "success" : "danger"}>
-                    Profile only
-                  </Badge>
+            {hostProfiles.length === 0 && !hostEditorOpen && (
+              <div className="empty-state">
+                <Server size={28} />
+                <strong>No remote solver host configured</strong>
+                <p>
+                  Keys stay in the SSH agent or user keychain. Private key material is never stored
+                  inside a project.
+                </p>
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  onClick={() => setHostEditorOpen(true)}
+                >
+                  <Plus size={15} /> Add host profile
+                </button>
+              </div>
+            )}
+            {hostProfiles.length > 0 && !hostEditorOpen && (
+              <div className="remote-profile-list">
+                {hostProfiles.map((profile) => (
+                  <article className="remote-profile" key={profile.id}>
+                    <Server size={17} />
+                    <span>
+                      <strong>{profile.displayName}</strong>
+                      <small>
+                        {profile.username}@{profile.hostname}:{profile.port} · {profile.scheduler}
+                      </small>
+                    </span>
+                    <Badge tone={validateRemoteHost(profile).length === 0 ? "success" : "danger"}>
+                      Profile only
+                    </Badge>
+                    <button
+                      type="button"
+                      className="icon-button icon-button--quiet"
+                      aria-label={`Delete ${profile.displayName}`}
+                      onClick={() => {
+                        if (
+                          !window.confirm(`Delete remote host profile “${profile.displayName}”?`)
+                        ) {
+                          return;
+                        }
+                        const updated = hostProfiles.filter(
+                          (candidate) => candidate.id !== profile.id
+                        );
+                        localStorage.setItem("aerocel.remoteProfiles", JSON.stringify(updated));
+                        setHostProfiles(updated);
+                      }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </article>
+                ))}
+                <button
+                  className="button button--quiet"
+                  type="button"
+                  onClick={() => {
+                    setHostDraft((current) => ({ ...current, id: crypto.randomUUID() }));
+                    setHostEditorOpen(true);
+                  }}
+                >
+                  <Plus size={15} /> Add another host
+                </button>
+              </div>
+            )}
+            {hostEditorOpen && (
+              <div className="remote-profile-editor">
+                <div className="form-grid">
+                  <label>
+                    <span>Display name</span>
+                    <input
+                      value={hostDraft.displayName}
+                      onChange={(event) =>
+                        setHostDraft((current) => ({ ...current, displayName: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Host or SSH alias</span>
+                    <input
+                      value={hostDraft.hostname}
+                      onChange={(event) =>
+                        setHostDraft((current) => ({ ...current, hostname: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Username</span>
+                    <input
+                      value={hostDraft.username}
+                      onChange={(event) =>
+                        setHostDraft((current) => ({ ...current, username: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>SSH port</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="65535"
+                      value={hostDraft.port}
+                      onChange={(event) =>
+                        setHostDraft((current) => ({
+                          ...current,
+                          port: event.target.valueAsNumber
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Remote case root</span>
+                    <input
+                      value={hostDraft.remoteRoot}
+                      onChange={(event) =>
+                        setHostDraft((current) => ({ ...current, remoteRoot: event.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Scheduler</span>
+                    <select
+                      value={hostDraft.scheduler}
+                      onChange={(event) =>
+                        setHostDraft((current) => ({
+                          ...current,
+                          scheduler: event.target.value as "none" | "slurm"
+                        }))
+                      }
+                    >
+                      <option value="none">Direct process</option>
+                      <option value="slurm">Slurm</option>
+                    </select>
+                  </label>
+                </div>
+                <Notice tone="info" title="Credential boundary">
+                  This stores connection metadata only. Configure the hostname in your SSH config
+                  and load keys through the SSH agent.
+                </Notice>
+                <div className="editor-actions">
                   <button
                     type="button"
-                    className="icon-button icon-button--quiet"
-                    aria-label={`Delete ${profile.displayName}`}
-                    onClick={() => {
-                      if (!window.confirm(`Delete remote host profile “${profile.displayName}”?`)) {
-                        return;
-                      }
-                      const updated = hostProfiles.filter(
-                        (candidate) => candidate.id !== profile.id
-                      );
-                      localStorage.setItem("aerocel.remoteProfiles", JSON.stringify(updated));
-                      setHostProfiles(updated);
-                    }}
+                    className="button button--quiet"
+                    onClick={() => setHostEditorOpen(false)}
                   >
-                    <Trash2 size={14} />
+                    Cancel
                   </button>
-                </article>
-              ))}
-              <button
-                className="button button--quiet"
-                type="button"
-                onClick={() => {
-                  setHostDraft((current) => ({ ...current, id: crypto.randomUUID() }));
-                  setHostEditorOpen(true);
-                }}
-              >
-                <Plus size={15} /> Add another host
-              </button>
-            </div>
-          )}
-          {hostEditorOpen && (
-            <div className="remote-profile-editor">
-              <div className="form-grid">
-                <label>
-                  <span>Display name</span>
-                  <input
-                    value={hostDraft.displayName}
-                    onChange={(event) =>
-                      setHostDraft((current) => ({ ...current, displayName: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  <span>Host or SSH alias</span>
-                  <input
-                    value={hostDraft.hostname}
-                    onChange={(event) =>
-                      setHostDraft((current) => ({ ...current, hostname: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  <span>Username</span>
-                  <input
-                    value={hostDraft.username}
-                    onChange={(event) =>
-                      setHostDraft((current) => ({ ...current, username: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  <span>SSH port</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="65535"
-                    value={hostDraft.port}
-                    onChange={(event) =>
-                      setHostDraft((current) => ({ ...current, port: event.target.valueAsNumber }))
-                    }
-                  />
-                </label>
-                <label>
-                  <span>Remote case root</span>
-                  <input
-                    value={hostDraft.remoteRoot}
-                    onChange={(event) =>
-                      setHostDraft((current) => ({ ...current, remoteRoot: event.target.value }))
-                    }
-                  />
-                </label>
-                <label>
-                  <span>Scheduler</span>
-                  <select
-                    value={hostDraft.scheduler}
-                    onChange={(event) =>
-                      setHostDraft((current) => ({
-                        ...current,
-                        scheduler: event.target.value as "none" | "slurm"
-                      }))
-                    }
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    onClick={saveHostProfile}
                   >
-                    <option value="none">Direct process</option>
-                    <option value="slurm">Slurm</option>
-                  </select>
-                </label>
+                    <Save size={15} /> Save profile
+                  </button>
+                </div>
               </div>
-              <Notice tone="info" title="Credential boundary">
-                This stores connection metadata only. Configure the hostname in your SSH config and
-                load keys through the SSH agent.
-              </Notice>
-              <div className="editor-actions">
-                <button
-                  type="button"
-                  className="button button--quiet"
-                  onClick={() => setHostEditorOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button type="button" className="button button--primary" onClick={saveHostProfile}>
-                  <Save size={15} /> Save profile
-                </button>
-              </div>
+            )}
+          </section>
+          <section className="section-card">
+            <div className="section-card__header">
+              <span>
+                <small>DIAGNOSTICS</small>
+                <h2>Support bundle</h2>
+              </span>
+              <Code2 size={18} />
             </div>
-          )}
-        </section>
-        <section className="section-card">
-          <div className="section-card__header">
-            <span>
-              <small>DIAGNOSTICS</small>
-              <h2>Support bundle</h2>
-            </span>
-            <Code2 size={18} />
-          </div>
-          <p className="card-copy">
-            Exports host capabilities and recent application errors. Project geometry, result
-            fields, credentials, and private keys are excluded.
-          </p>
-          <button
-            type="button"
-            className="button button--quiet"
-            onClick={createDiagnostics}
-            disabled={diagnosing}
-          >
-            {diagnosing ? <RefreshCw className="spin" size={15} /> : <Download size={15} />} Create
-            diagnostic JSON
-          </button>
-          {props.recentErrors.length > 0 && (
-            <p className="error-count">
-              <AlertTriangle size={14} /> {props.recentErrors.length} recent errors will be included
-              after redaction.
+            <p className="card-copy">
+              Exports host capabilities and recent application errors. Project geometry, result
+              fields, credentials, and private keys are excluded.
             </p>
-          )}
-        </section>
+            <button
+              type="button"
+              className="button button--quiet"
+              onClick={createDiagnostics}
+              disabled={diagnosing}
+            >
+              {diagnosing ? <RefreshCw className="spin" size={15} /> : <Download size={15} />}{" "}
+              Create diagnostic JSON
+            </button>
+            {props.recentErrors.length > 0 && (
+              <p className="error-count">
+                <AlertTriangle size={14} /> {props.recentErrors.length} recent errors will be
+                included after redaction.
+              </p>
+            )}
+          </section>
+        </div>
       </div>
     </div>
   );

@@ -46,7 +46,7 @@ describe("report generation", () => {
         warnings: []
       },
       manifest: {
-        aerocelForgeVersion: "0.1.0",
+        aerocelForgeVersion: "1.0.0",
         gitCommit: "dev",
         operatingSystem: "test",
         generatedAt: "now",

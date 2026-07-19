@@ -199,12 +199,12 @@ export async function createDiagnosticBundle(
 ): Promise<string> {
   if (isNativeDesktop()) {
     return invoke<string>("create_diagnostic_bundle", {
-      request: { appVersion: "0.1.0", projectName, recentErrors }
+      request: { appVersion: "1.0.0", projectName, recentErrors }
     });
   }
   const content = JSON.stringify(
     {
-      appVersion: "0.1.0",
+      appVersion: "1.0.0",
       projectName,
       generatedAt: new Date().toISOString(),
       userAgent: navigator.userAgent,
