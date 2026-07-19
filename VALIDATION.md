@@ -23,6 +23,9 @@ The repository covers:
 - explicit aerodynamic drag-term summation, added-drag propagation, symmetric
   stall margins, exact glide-angle sink rate, analytical parabolic-polar best
   `L/D`, and rejection of nonphysical glide inputs.
+- interactive flight-program parsing and arbitrary-code rejection, fixed-step
+  hover repeatability, manual attitude response, altitude/program following,
+  hard-impact ground contact, and mirrored Kestrel wing geometry invariants.
 
 Run the full matrix with the commands in [README.md](README.md). CI repeats the
 TypeScript, Python, and Rust gates on clean runners.
@@ -61,7 +64,7 @@ No result should receive a validated grade solely because a solver completed.
 
 ## Build record — 2026-07-19, macOS 15.7.3 arm64
 
-- `npm run check`: passed; 42 TypeScript tests, strict type checking, lint,
+- `npm run check`: passed; 51 TypeScript tests, strict type checking, lint,
   formatting, and every workspace build passed.
 - Python 3.9: compilation and 3 unit tests passed; strict mypy and Ruff passed.
 - Scientific orchestrator: real loopback `/health` smoke test passed and correctly
@@ -76,11 +79,14 @@ No result should receive a validated grade solely because a solver completed.
   signing credentials were provided.
 - UI: first-run, Geometry, explicit format/unit/type import setup, drag/drop target,
   editable transforms, Settings, remote-host profile form, Rapid Aero, CFD
-  unavailable state, motor-out failure, and 1040 × 700 responsive layout were
-  exercised in the in-app browser. The browser control surface cannot attach a
-  real local file; file parsing and commit preconditions are covered by unit tests
-  and the native archive layer by Rust tests.
-- Build note: Vite reports a 1.38 MB initial JavaScript chunk (380 kB gzip), driven
+  unavailable state, motor-out failure, Flight Lab hover and autonomous program
+  execution, invalid behavior rejection, corrected mirrored example geometry,
+  and 1040 × 700 responsive layout were exercised in the in-app browser. The
+  browser control surface cannot attach a real local file or physical gamepad;
+  file parsing and commit preconditions are covered by unit tests and the native
+  archive layer by Rust tests. A real transmitter/gamepad compatibility matrix
+  remains release-qualification evidence.
+- Build note: Vite reports a 1.41 MB initial JavaScript chunk (388 kB gzip), driven
   primarily by the native 3D stack. Format loaders are split into separate dynamic
   chunks. Further 3D workspace lazy loading remains a measured performance task;
   it does not affect the local bundle's integrity.

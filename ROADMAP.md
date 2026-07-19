@@ -49,7 +49,12 @@ it does not imply certification or parity with a dedicated commercial tool.
 
 - [x] quaternion nonlinear 6-DOF rigid body dynamics with full inertia tensor,
       RK4 integration, frame transforms, trim, deterministic sensor noise, and logs.
-- [x] wind/control input contracts and real-time workspace visualization.
+- [x] wind/control input contracts and current-vehicle real-time visualization.
+- [x] interactive Mode 2 pointer/keyboard/gamepad control, hover/cruise starts,
+      stabilization, altitude/heading/airspeed targets, return-home, battery and
+      ground-contact state, and bounded waypoint behavior programs.
+- [ ] calibrated multidimensional coefficient/control-derivative data, complete
+      stall/spin/ground-effect/terrain models, and hardware controller timing.
 
 ## 6. VTOL transition
 

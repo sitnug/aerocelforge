@@ -8,6 +8,9 @@ native filesystem access narrow, and solver provenance auditable.
 flowchart LR
   UI["React engineering workspaces"] --> CORE["Typed analysis packages"]
   UI --> VIEW["Three.js vehicle viewport"]
+  UI --> FLIGHT["Interactive RC / mission controller"]
+  FLIGHT --> CORE
+  FLIGHT --> VIEW
   UI --> NATIVE["Tauri command boundary"]
   CORE --> RESULT["Result envelope: source, fidelity, quality, hash"]
   NATIVE --> STORE["Managed project and report storage"]
@@ -46,6 +49,13 @@ secret assignments before export.
 The canonical vehicle frame is body FRD (x forward, y right, z down). World
 dynamics use NED. Three.js rendering converts to FLU/ENU only at the display
 boundary. Angles are radians internally and SI is the computational unit system.
+
+The interactive Flight Lab runs a deterministic 60 Hz fixed-step controller and
+six-degree-of-freedom loop in the webview. Pointer, keyboard, and Gamepad API
+inputs become bounded normalized pilot channels. The behavior editor compiles a
+small declarative mission grammar into typed targets and waypoints; it does not
+evaluate user code. The vehicle render, trail, HUD, force telemetry, and battery
+state all consume the same integrated state.
 
 ## Fidelity model
 

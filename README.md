@@ -35,6 +35,13 @@ choose one file or drag it onto the drop zone. Locally supported triangle format
 are inspected before **Add to assembly** becomes available; CAD and articulated
 assembly formats remain explicitly gated on their named external adapters.
 
+To fly the loaded vehicle, open **Fly**. The interactive Flight Lab provides
+on-screen Mode 2 sticks, keyboard and standard gamepad control, hover and cruise
+starts, stabilization/altitude/return-home modes, wind and autopilot targets,
+battery and force telemetry, and a safe waypoint behavior language. See
+[docs/FLIGHT_SIMULATOR.md](docs/FLIGHT_SIMULATOR.md) for controls, commands, and
+the explicit physical-validation boundary.
+
 ## Verification
 
 ```bash
@@ -65,6 +72,8 @@ Start with [MACOS_SETUP.md](MACOS_SETUP.md), then read
 in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
 The equations and real-world aerodynamic calibration boundary are documented in
 [docs/AERODYNAMICS_MODEL.md](docs/AERODYNAMICS_MODEL.md).
+Interactive flight controls and mission behavior are documented in
+[docs/FLIGHT_SIMULATOR.md](docs/FLIGHT_SIMULATOR.md).
 
 ## Safety and scope
 

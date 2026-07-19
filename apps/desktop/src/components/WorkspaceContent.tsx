@@ -61,6 +61,7 @@ import type { AnalysisOptions, RapidAnalysis } from "../lib/analysis";
 import { createDiagnosticBundle, hashText, writeReport, type SystemProfile } from "../lib/native";
 import { AircraftViewport, type ViewportOptions } from "./AircraftViewport";
 import { EngineeringPlot } from "./EngineeringPlot";
+import { FlightLab } from "./FlightLab";
 import { GeometryImportDialog } from "./GeometryImportDialog";
 
 interface WorkspaceContentProps {
@@ -1415,140 +1416,16 @@ function AeroWorkspace(props: WorkspaceContentProps) {
 
 function FlightWorkspace(props: WorkspaceContentProps) {
   return (
-    <div className="scroll-workspace">
-      <WorkspaceHeader
-        eyebrow="FLIGHT DYNAMICS"
-        title="Trim & six-degree-of-freedom model"
-        description="Quaternion rigid-body integration with body-frame forces, full inertia tensor, gravity, actuators, and deterministic replay."
-        actions={
-          <button
-            className="button button--primary"
-            type="button"
-            onClick={() =>
-              props.notify("Trim condition recomputed from the current A1 aerodynamic model.")
-            }
-          >
-            <Play size={15} /> Solve trim
-          </button>
-        }
-      />
-      <div className="metric-grid metric-grid--four">
-        <MetricCard
-          label="TRIM ANGLE OF ATTACK"
-          value={((props.analysis.trim.angleOfAttackRad * 180) / Math.PI).toFixed(2)}
-          unit="deg"
-          detail={`${props.analysis.trim.liftCoefficient.toFixed(3)} required CL`}
-          provenance="Linear longitudinal trim"
-          tone={props.analysis.trim.converged ? "accent" : "danger"}
-        />
-        <MetricCard
-          label="REQUIRED THRUST"
-          value={props.analysis.trim.requiredThrustN.toFixed(1)}
-          unit="N"
-          detail={`At ${props.analysisOptions.airspeedMS.toFixed(0)} m/s`}
-          provenance="Derived from A1 drag"
-        />
-        <MetricCard
-          label="BEST GLIDE SPEED"
-          value={props.analysis.glide.bestGlide.airspeedMS.toFixed(1)}
-          unit="m/s"
-          detail={`L/D ${props.analysis.glide.bestGlide.liftToDrag.toFixed(1)}`}
-          provenance="A1 glide envelope"
-        />
-        <MetricCard
-          label="MINIMUM SINK"
-          value={props.analysis.glide.minimumSink.sinkRateMS.toFixed(2)}
-          unit="m/s"
-          detail={`At ${props.analysis.glide.minimumSink.airspeedMS.toFixed(1)} m/s`}
-          provenance="A1 glide envelope"
-        />
-      </div>
-      <div className="plot-grid">
-        <EngineeringPlot
-          title="Glide performance"
-          subtitle="Steady, unpowered, still-air equilibrium"
-          xLabel="Airspeed (m/s)"
-          yLabel="L/D (—)"
-          data={props.analysis.glide.points.map((point) => ({
-            x: point.airspeedMS,
-            y: point.liftToDrag
-          }))}
-          source="Derived from A1 polar"
-          fidelity="Preliminary"
-        />
-        <EngineeringPlot
-          title="Power required"
-          subtitle="Aerodynamic power only; propeller windmilling is not included"
-          xLabel="Airspeed (m/s)"
-          yLabel="Power (W)"
-          data={props.analysis.glide.points.map((point) => ({
-            x: point.airspeedMS,
-            y: point.powerRequiredW
-          }))}
-          source="Derived from A1 polar"
-          fidelity="Preliminary"
-          color="#7ba8ff"
-        />
-      </div>
-      <div className="split-layout">
-        <section className="section-card">
-          <div className="section-card__header">
-            <span>
-              <small>INTEGRATOR</small>
-              <h2>Nonlinear rigid body</h2>
-            </span>
-            <Badge tone="success">Unit-tested</Badge>
-          </div>
-          <div className="feature-list">
-            <span>
-              <CheckCircle2 size={15} />
-              <strong>Quaternion attitude</strong>
-              <small>No Euler-angle singularity in state propagation</small>
-            </span>
-            <span>
-              <CheckCircle2 size={15} />
-              <strong>Body forces and moments</strong>
-              <small>Full tensor and gyroscopic coupling</small>
-            </span>
-            <span>
-              <CheckCircle2 size={15} />
-              <strong>Fixed-step RK4</strong>
-              <small>Deterministic replay with recorded step size</small>
-            </span>
-            <span>
-              <CheckCircle2 size={15} />
-              <strong>NED / FRD conventions</strong>
-              <small>Explicit frame transforms and sign tests</small>
-            </span>
-          </div>
-        </section>
-        <section className="section-card">
-          <div className="section-card__header">
-            <span>
-              <small>AERODYNAMIC DATABASE</small>
-              <h2>Current source</h2>
-            </span>
-            <Badge tone="warning">A1 estimate</Badge>
-          </div>
-          <p className="card-copy">
-            The 6-DOF core is available, but a full nonlinear Kestrel flight run needs a
-            multidimensional aerodynamic database. Current trim and glide values use the analytical
-            attached-flow model only.
-          </p>
-          <button
-            type="button"
-            className="button button--quiet"
-            onClick={() =>
-              props.notify(
-                "Database generation configuration preserved; external samples are not fabricated."
-              )
-            }
-          >
-            <FileJson size={15} /> Configure database sweep
-          </button>
-        </section>
-      </div>
-    </div>
+    <FlightLab
+      project={props.project}
+      analysis={props.analysis}
+      analysisOptions={props.analysisOptions}
+      selectedId={props.selectedId}
+      onSelect={props.onSelect}
+      viewportOptions={props.viewportOptions}
+      geometryAssets={props.geometryAssets}
+      notify={props.notify}
+    />
   );
 }
 

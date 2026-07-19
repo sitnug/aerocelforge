@@ -91,7 +91,13 @@ const workspaces: readonly WorkspaceDefinition[] = [
     group: "analyze"
   },
   { id: "cfd", label: "CFD wind tunnel", shortLabel: "CFD", icon: CloudCog, group: "analyze" },
-  { id: "flight", label: "Flight dynamics", shortLabel: "Flight", icon: Gauge, group: "analyze" },
+  {
+    id: "flight",
+    label: "Interactive flight simulator",
+    shortLabel: "Fly",
+    icon: Gauge,
+    group: "analyze"
+  },
   {
     id: "transition",
     label: "VTOL transition",

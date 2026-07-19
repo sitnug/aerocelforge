@@ -62,10 +62,26 @@ calibration workflow.
 
 ## Flight and transition
 
-Flight uses quaternion nonlinear 6-DOF rigid-body dynamics. Trim failure is an
-engineering result, not a UI error. Transition uses independent tilt schedules,
-rotor-wing interaction approximation, battery power, altitude loss, and failure
-checks. Run the one-motor-out case to see an intentionally failed safety case.
+Open **Fly** to control the currently loaded vehicle in the interactive Flight
+Lab. Choose a hover or cruise start, select Manual, Stabilize, Altitude hold, or
+Return home, then use the Mode 2 on-screen sticks, keyboard, or a standard
+gamepad. Arrows control pitch/roll, A/D yaw, W/S throttle, Q/E motor tilt, and
+Space starts or pauses the fixed-step simulation. Live telemetry includes
+attitude, airspeed, altitude, wind-relative aerodynamic state, forces, power,
+position, trail, and battery use.
+
+The behavior editor accepts a bounded mission language with ALTITUDE, AIRSPEED,
+HEADING, WAYPOINT, LAND, and FAILSAFE commands. Unknown or invalid commands
+disable arming; arbitrary code is never executed. See
+[FLIGHT_SIMULATOR.md](FLIGHT_SIMULATOR.md) for the complete controls, syntax,
+limits, and validation boundary.
+
+Flight uses quaternion nonlinear 6-DOF rigid-body dynamics. The interactive loads
+are concept-level A1 aerodynamics and simplified control moments, so the workspace
+must not be treated as a calibrated digital twin. Trim failure is an engineering
+result, not a UI error. Transition uses independent tilt schedules, rotor-wing
+interaction approximation, battery power, altitude loss, and failure checks. Run
+the one-motor-out case to see an intentionally failed safety case.
 
 ## CFD and SITL
 

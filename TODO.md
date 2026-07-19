@@ -12,6 +12,9 @@
 - Add an A2 vortex-lattice solver with Trefftz-plane verification, then an A3
   panel adapter with published validation cases.
 - Complete live MAVLink transport and versioned PX4/Gazebo model generators.
+- Add transmitter mapping/calibration profiles, controller/actuator dynamics,
+  terrain and ground effect, and calibrated nonlinear stall/spin data to the
+  interactive Flight Lab.
 - Parse real OpenFOAM residuals, force coefficients, mesh quality, and field files
   into the result envelope; add ParaView-compatible field discovery.
 - Add an artifact database and retention controls for large CFD/SITL jobs.
