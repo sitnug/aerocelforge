@@ -61,6 +61,8 @@ const UNIT_LABELS: Readonly<Record<GeometryUnit, string>> = {
   ft: "Feet (ft)"
 };
 
+type ImportTarget = "part" | "whole_drone";
+
 function baseName(fileName: string): string {
   return fileName
     .replace(/\.[^.]+$/u, "")
@@ -102,6 +104,7 @@ export function GeometryImportDialog({
   const [format, setFormat] = useState<GeometryImportFormat>("auto");
   const [units, setUnits] = useState<GeometryUnit>("m");
   const [componentType, setComponentType] = useState<VehicleComponent["type"]>("fuselage");
+  const [importTarget, setImportTarget] = useState<ImportTarget>("part");
   const [componentName, setComponentName] = useState("");
   const [parentId, setParentId] = useState<string>("");
   const [cfdIncluded, setCfdIncluded] = useState(true);
@@ -172,6 +175,8 @@ export function GeometryImportDialog({
     scaleConfirmed &&
     componentName.trim() !== "" &&
     !committing;
+  const importedComponentType: VehicleComponent["type"] =
+    importTarget === "whole_drone" ? "fuselage" : componentType;
 
   const commitImport = async (): Promise<void> => {
     if (
@@ -197,8 +202,8 @@ export function GeometryImportDialog({
     const component: VehicleComponent = {
       id,
       name: componentName.trim(),
-      type: componentType,
-      parentId: parentId === "" ? null : parentId,
+      type: importedComponentType,
+      parentId: importTarget === "whole_drone" || parentId === "" ? null : parentId,
       visible: true,
       cfdIncluded,
       transform: {
@@ -227,7 +232,7 @@ export function GeometryImportDialog({
         repairs: []
       },
       mass: null,
-      visual: { color: colorForType(componentType), opacity: 1 },
+      visual: { color: colorForType(importedComponentType), opacity: 1 },
       properties: {
         importFormat: result.formatId,
         importSizeBytes: result.sizeBytes,
@@ -237,7 +242,9 @@ export function GeometryImportDialog({
         thinAxisRatio: inspection.thinAxisRatio,
         coordinateConvention: "Source axes interpreted as component-local body FRD",
         sourceFileName: result.fileName,
-        sourceArchive: archivedSource
+        sourceArchive: archivedSource,
+        importTarget,
+        keptAsOneObject: true
       }
     };
     onGeometryAsset(result.sourceSha256, result.mesh);
@@ -257,7 +264,11 @@ export function GeometryImportDialog({
             ]
     }));
     onSelect(id);
-    notify(`${component.name} was added to the aircraft and checked for common 3D model problems.`);
+    notify(
+      importTarget === "whole_drone"
+        ? `${component.name} was added as one whole drone model. All ${inspection.connectedBodyCount} connected shapes stay together.`
+        : `${component.name} was added as one complete part and checked for common 3D model problems.`
+    );
     setSelectedFile(null);
     setResult(null);
     setComponentName("");
@@ -353,31 +364,68 @@ export function GeometryImportDialog({
 
             <div className="import-step-label import-step-label--spaced">
               <span>02</span>
-              <strong>Name the new part</strong>
+              <strong>Choose what the file represents</strong>
             </div>
-            <label className="import-field">
-              <span className="inline-help-label">
-                What kind of part is it?
-                <InfoTip label="Part kind">
-                  This tells the app what the shape does. For example, a wing makes lift and a
-                  battery adds weight and energy.
+            <fieldset className="import-target-picker">
+              <legend className="inline-help-label">
+                Import as
+                <InfoTip label="Import as">
+                  A part can be moved and attached to another part. A whole drone model keeps every
+                  shape in the file together as one object.
                 </InfoTip>
-              </span>
-              <select
-                value={componentType}
-                onChange={(event) =>
-                  setComponentType(event.target.value as VehicleComponent["type"])
-                }
-              >
-                {ComponentTypeSchema.options.map((type) => (
-                  <option value={type} key={type}>
-                    {titleCase(type)}
-                  </option>
-                ))}
-              </select>
-            </label>
+              </legend>
+              <label className={importTarget === "part" ? "import-target--selected" : ""}>
+                <input
+                  type="radio"
+                  name="import-target"
+                  value="part"
+                  checked={importTarget === "part"}
+                  onChange={() => setImportTarget("part")}
+                />
+                <span>
+                  <strong>One complete drone part</strong>
+                  <small>For a wing, body, motor, landing gear, or other single part.</small>
+                </span>
+              </label>
+              <label className={importTarget === "whole_drone" ? "import-target--selected" : ""}>
+                <input
+                  type="radio"
+                  name="import-target"
+                  value="whole_drone"
+                  checked={importTarget === "whole_drone"}
+                  onChange={() => setImportTarget("whole_drone")}
+                />
+                <span>
+                  <strong>Whole drone model</strong>
+                  <small>Every shape in the STL stays together as one selectable object.</small>
+                </span>
+              </label>
+            </fieldset>
+            {importTarget === "part" && (
+              <label className="import-field">
+                <span className="inline-help-label">
+                  What kind of part is it?
+                  <InfoTip label="Part kind">
+                    This tells the app what the shape does. For example, a wing makes lift and a
+                    battery adds weight and energy.
+                  </InfoTip>
+                </span>
+                <select
+                  value={componentType}
+                  onChange={(event) =>
+                    setComponentType(event.target.value as VehicleComponent["type"])
+                  }
+                >
+                  {ComponentTypeSchema.options.map((type) => (
+                    <option value={type} key={type}>
+                      {titleCase(type)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             <label className="import-field">
-              <span>Component name</span>
+              <span>{importTarget === "whole_drone" ? "Drone model name" : "Part name"}</span>
               <input
                 value={componentName}
                 maxLength={80}
@@ -385,17 +433,19 @@ export function GeometryImportDialog({
                 onChange={(event) => setComponentName(event.target.value)}
               />
             </label>
-            <label className="import-field">
-              <span>Attach it to</span>
-              <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
-                <option value="">The whole aircraft</option>
-                {project.vehicle.components.map((component) => (
-                  <option value={component.id} key={component.id}>
-                    {component.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {importTarget === "part" && (
+              <label className="import-field">
+                <span>Attach it to</span>
+                <select value={parentId} onChange={(event) => setParentId(event.target.value)}>
+                  <option value="">The whole aircraft</option>
+                  {project.vehicle.components.map((component) => (
+                    <option value={component.id} key={component.id}>
+                      {component.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {advancedMode && (
               <label className="check-row">
                 <input
@@ -572,7 +622,10 @@ export function GeometryImportDialog({
                   />
                   <span>
                     <strong>I checked the size and direction of this model.</strong>
-                    <small>You can move and turn the part after importing it.</small>
+                    <small>
+                      You can move and turn the{" "}
+                      {importTarget === "whole_drone" ? "whole model" : "part"} after importing it.
+                    </small>
                   </span>
                 </label>
               </section>
@@ -601,7 +654,11 @@ export function GeometryImportDialog({
               onClick={() => void commitImport()}
             >
               {committing ? <LoaderCircle className="spin" size={15} /> : <Box size={15} />}
-              {committing ? "Saving model…" : "Add to aircraft"}
+              {committing
+                ? "Saving model…"
+                : importTarget === "whole_drone"
+                  ? "Add whole drone model"
+                  : "Add complete part"}
             </button>
           </div>
         </footer>

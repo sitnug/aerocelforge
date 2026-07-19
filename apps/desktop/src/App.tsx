@@ -47,7 +47,17 @@ import {
 } from "./lib/native";
 import { WorkspaceContent } from "./components/WorkspaceContent";
 import { InfoTip } from "./components/InfoTip";
+import {
+  DeletePartDialog,
+  PartContextMenu,
+  type PartContextMenuState
+} from "./components/PartActionOverlays";
 import type { ViewportOptions } from "./components/AircraftViewport";
+import {
+  applyComponentDeletion,
+  planComponentDeletion,
+  type ComponentDeletionPlan
+} from "./lib/componentOperations";
 import { readAdvancedPreference, readThemePreference, type AppTheme } from "./lib/preferences";
 import "./styles.css";
 
@@ -189,6 +199,16 @@ type SaveState =
   | { readonly status: "saved"; readonly detail: string }
   | { readonly status: "error"; readonly detail: string };
 
+function isTextEntryTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.isContentEditable ||
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement
+  );
+}
+
 function ActivityRail({
   active,
   onChange,
@@ -236,11 +256,13 @@ function ComponentNavigator({
   project,
   selectedId,
   onSelect,
+  onPartContextMenu,
   onToggle
 }: {
   readonly project: AerocelProject;
   readonly selectedId: string | null;
   readonly onSelect: (id: string) => void;
+  readonly onPartContextMenu: (id: string, clientX: number, clientY: number) => void;
   readonly onToggle: () => void;
 }) {
   const groups = [
@@ -335,6 +357,11 @@ function ComponentNavigator({
                   key={component.id}
                   className={`component-row ${selectedId === component.id ? "component-row--active" : ""}`}
                   onClick={() => onSelect(component.id)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    onSelect(component.id);
+                    onPartContextMenu(component.id, event.clientX, event.clientY);
+                  }}
                 >
                   <span
                     className="component-swatch"
@@ -662,6 +689,8 @@ export default function App() {
   const [appFullscreen, setAppFullscreen] = useState(false);
   const [theme, setTheme] = useState<AppTheme>(readThemePreference);
   const [advancedMode, setAdvancedMode] = useState(readAdvancedPreference);
+  const [partContextMenu, setPartContextMenu] = useState<PartContextMenuState | null>(null);
+  const [deleteRequestId, setDeleteRequestId] = useState<string | null>(null);
 
   const visibleWorkspaces = useMemo(
     () => workspaces.filter((workspace) => advancedMode || workspace.advanced !== true),
@@ -679,6 +708,20 @@ export default function App() {
     } satisfies WorkspaceDefinition);
   const selectedComponent: VehicleComponent | null =
     project.vehicle.components.find((component) => component.id === selectedId) ?? null;
+  const deletionCheck = useMemo<{
+    readonly plan: ComponentDeletionPlan | null;
+    readonly blocker: string | null;
+  }>(() => {
+    if (deleteRequestId === null) return { plan: null, blocker: null };
+    try {
+      return { plan: planComponentDeletion(project, deleteRequestId), blocker: null };
+    } catch (error: unknown) {
+      return {
+        plan: null,
+        blocker: error instanceof Error ? error.message : "This part cannot be deleted."
+      };
+    }
+  }, [deleteRequestId, project]);
   const analysis = useMemo(
     () => runRapidAnalysis(project, analysisOptions),
     [project, analysisOptions]
@@ -801,10 +844,26 @@ export default function App() {
         setGeometryImportOpen(true);
       }
       if (event.key === "Escape") setCommandOpen(false);
+      if (
+        (event.key === "Delete" || event.key === "Backspace") &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !isTextEntryTarget(event.target) &&
+        selectedId !== null &&
+        !geometryImportOpen &&
+        !setupOpen &&
+        !commandOpen &&
+        deleteRequestId === null
+      ) {
+        event.preventDefault();
+        setPartContextMenu(null);
+        setDeleteRequestId(selectedId);
+      }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, []);
+  }, [commandOpen, deleteRequestId, geometryImportOpen, selectedId, setupOpen]);
 
   useEffect(() => {
     if (!projectReady) return;
@@ -874,6 +933,48 @@ export default function App() {
       enabled
         ? "Advanced tools are now visible. Technical names and settings are shown."
         : "Simple mode is on. Your project and advanced settings were not deleted."
+    );
+  };
+
+  const openPartContextMenu = (id: string, clientX: number, clientY: number): void => {
+    const component = project.vehicle.components.find((item) => item.id === id);
+    if (component === undefined) return;
+    setSelectedId(id);
+    setPartContextMenu({ id, name: component.name, clientX, clientY });
+  };
+
+  const editPart = (id: string): void => {
+    const component = project.vehicle.components.find((item) => item.id === id);
+    if (component === undefined) return;
+    setSelectedId(id);
+    setActiveWorkspace("geometry");
+    setPartContextMenu(null);
+    setToast(`${component.name} is ready to edit in the panel on the right.`);
+  };
+
+  const requestPartDelete = (id: string): void => {
+    setSelectedId(id);
+    setPartContextMenu(null);
+    setDeleteRequestId(id);
+  };
+
+  const confirmPartDelete = (): void => {
+    const plan = deletionCheck.plan;
+    if (plan === null) return;
+    const updated = applyComponentDeletion(project, plan);
+    const remainingGeometryHashes = new Set(
+      updated.vehicle.components
+        .map((component) => component.geometry.sourceSha256)
+        .filter((sha): sha is string => sha !== null)
+    );
+    setProject(updated);
+    setGeometryAssets(
+      (current) => new Map([...current].filter(([sha]) => remainingGeometryHashes.has(sha)))
+    );
+    setSelectedId(updated.vehicle.components[0]?.id ?? null);
+    setDeleteRequestId(null);
+    setToast(
+      `${plan.rootName} was deleted${plan.componentIds.length > 1 ? ` with ${plan.componentIds.length - 1} attached part${plan.componentIds.length === 2 ? "" : "s"}` : ""}.`
     );
   };
 
@@ -969,6 +1070,7 @@ export default function App() {
             project={project}
             selectedId={selectedId}
             onToggle={() => setNavigatorOpen(false)}
+            onPartContextMenu={openPartContextMenu}
             onSelect={(id) => {
               setSelectedId(id);
               if (activeWorkspace === "home") setActiveWorkspace("geometry");
@@ -983,6 +1085,8 @@ export default function App() {
             selectedComponent={selectedComponent}
             selectedId={selectedId}
             onSelect={setSelectedId}
+            onPartContextMenu={openPartContextMenu}
+            onRequestPartDelete={requestPartDelete}
             analysis={analysis}
             analysisOptions={analysisOptions}
             setAnalysisOptions={setAnalysisOptions}
@@ -1046,6 +1150,19 @@ export default function App() {
         <span className="status-divider" />
         <span>{analysis.mass.massKg.toFixed(2)} kg</span>
       </footer>
+      <PartContextMenu
+        menu={partContextMenu}
+        onClose={() => setPartContextMenu(null)}
+        onEdit={editPart}
+        onDelete={requestPartDelete}
+      />
+      <DeletePartDialog
+        open={deleteRequestId !== null}
+        plan={deletionCheck.plan}
+        blocker={deletionCheck.blocker}
+        onClose={() => setDeleteRequestId(null)}
+        onConfirm={confirmPartDelete}
+      />
       <CommandPalette
         open={commandOpen}
         onClose={() => setCommandOpen(false)}

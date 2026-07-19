@@ -23,9 +23,10 @@ level choices are saved on this computer and never change the aircraft model.
 
 Use **3D model** and choose **Import model**, or use **File → Import model**.
 Select the file type explicitly or keep **Choose automatically**, choose the size
-units, tell Aerocel Forge what kind of part it is, and then choose one local file
-or drag it onto the drop zone. Advanced mode also shows CFD inclusion. The file
-extension must match the selected type.
+units, and choose **One complete drone part** or **Whole drone model**. Then choose
+one local file or drag it onto the drop zone. A whole-model STL keeps all of its
+connected shapes together as one selectable object. Advanced mode also shows CFD
+inclusion. The file extension must match the selected type.
 
 Built-in 3D import supports ASCII/binary STL, OBJ, self-contained glTF/GLB, PLY,
 and embedded-geometry DAE. Confirm the metre bounding box and source axes before
@@ -33,6 +34,12 @@ and embedded-geometry DAE. Confirm the metre bounding box and source axes before
 can be translated, rotated, non-uniformly scaled, reparented, retyped, or excluded
 from CFD in the inspector. The untouched source is archived by SHA-256 and is
 restored with the project at startup.
+
+To edit a part, right-click it in the 3D view, the left navigator, or the Parts
+table and choose **Edit part**. To remove a part, select it and press **Delete** or
+**Backspace**, use the right-click menu, or use **Delete this part** in the editor.
+Aerocel Forge shows attached children before deleting and automatically removes
+linked joints and propulsion setup. It will not let a project lose its last part.
 
 The inspection panel reports bounds, area, signed/absolute volume, connected
 bodies, duplicate and degenerate faces, boundary and non-manifold edges, likely

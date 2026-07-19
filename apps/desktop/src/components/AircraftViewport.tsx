@@ -2,7 +2,7 @@ import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import type { AerocelProject, VehicleComponent } from "@aerocel/simulation-schema";
 import type { TriangleMesh } from "@aerocel/geometry-core";
-import { useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { halfSurfaceSpanDirection } from "../lib/aircraftPresentation";
 
@@ -20,6 +20,7 @@ interface AircraftViewportProps {
   readonly project: AerocelProject;
   readonly selectedId: string | null;
   readonly onSelect: (id: string | null) => void;
+  readonly onPartContextMenu?: (id: string, clientX: number, clientY: number) => void;
   readonly options: ViewportOptions;
   readonly cgBodyM: readonly [number, number, number];
   readonly slipstreamRadiusM: number;
@@ -135,6 +136,10 @@ interface SelectableProps {
   readonly rotation?: [number, number, number];
 }
 
+const PartContextMenuContext = createContext<
+  ((id: string, clientX: number, clientY: number) => void) | undefined
+>(undefined);
+
 function Selectable({
   component,
   selected,
@@ -144,6 +149,7 @@ function Selectable({
   rotation
 }: SelectableProps) {
   const [hovered, setHovered] = useState(false);
+  const onPartContextMenu = useContext(PartContextMenuContext);
   useEffect(() => {
     if (hovered) document.body.style.cursor = "pointer";
     return () => {
@@ -159,6 +165,13 @@ function Selectable({
       {...(position === undefined ? {} : { position })}
       {...(rotation === undefined ? {} : { rotation })}
       onClick={handleClick}
+      onContextMenu={(event) => {
+        if (onPartContextMenu === undefined) return;
+        event.stopPropagation();
+        event.nativeEvent.preventDefault();
+        onSelect(component.id);
+        onPartContextMenu(component.id, event.nativeEvent.clientX, event.nativeEvent.clientY);
+      }}
       onPointerOver={(event) => {
         event.stopPropagation();
         setHovered(true);
@@ -492,7 +505,8 @@ function Scene({
   cgBodyM,
   geometryAssets,
   flightPose,
-  motorTiltRad
+  motorTiltRad,
+  onPartContextMenu
 }: AircraftViewportProps) {
   const motorTilt = new Map(
     project.vehicle.joints.map((joint) => [joint.childComponentId, joint.actualRad] as const)
@@ -545,64 +559,69 @@ function Scene({
           opacity={0.7}
         />
       )}
-      <group
-        position={vehiclePosition}
-        {...(vehicleQuaternion === undefined
-          ? { rotation: [0, -0.13, 0] as [number, number, number] }
-          : { quaternion: vehicleQuaternion })}
-      >
-        {project.vehicle.components
-          .filter((component) => component.visible)
-          .map((component) => (
-            <ComponentMesh
-              key={component.id}
-              component={component}
-              selected={selectedId === component.id}
-              onSelect={onSelect}
-              tiltRad={
-                motorTiltRad ?? motorTilt.get(component.id) ?? propellerTilt.get(component.id) ?? 0
-              }
-              options={options}
-              importedMesh={
-                component.geometry.sourceSha256 === null
-                  ? null
-                  : (geometryAssets?.get(component.geometry.sourceSha256) ?? null)
-              }
-            />
-          ))}
-        {options.showCg && (
-          <group position={bodyToScene(cgBodyM)}>
-            <mesh>
-              <sphereGeometry args={[0.055, 20, 20]} />
-              <meshBasicMaterial color="#ffbe59" depthTest={false} />
-            </mesh>
-            <Line
-              points={[
-                [-0.16, 0, 0],
-                [0.16, 0, 0]
-              ]}
-              color="#ffbe59"
-              lineWidth={1.4}
-            />
-            <Line
-              points={[
-                [0, -0.16, 0],
-                [0, 0.16, 0]
-              ]}
-              color="#ffbe59"
-              lineWidth={1.4}
-            />
-            <Line
-              points={[
-                [0, 0, -0.16],
-                [0, 0, 0.16]
-              ]}
-              color="#ffbe59"
-              lineWidth={1.4}
-            />
-          </group>
-        )}
-      </group>
+      <PartContextMenuContext.Provider value={onPartContextMenu}>
+        <group
+          position={vehiclePosition}
+          {...(vehicleQuaternion === undefined
+            ? { rotation: [0, -0.13, 0] as [number, number, number] }
+            : { quaternion: vehicleQuaternion })}
+        >
+          {project.vehicle.components
+            .filter((component) => component.visible)
+            .map((component) => (
+              <ComponentMesh
+                key={component.id}
+                component={component}
+                selected={selectedId === component.id}
+                onSelect={onSelect}
+                tiltRad={
+                  motorTiltRad ??
+                  motorTilt.get(component.id) ??
+                  propellerTilt.get(component.id) ??
+                  0
+                }
+                options={options}
+                importedMesh={
+                  component.geometry.sourceSha256 === null
+                    ? null
+                    : (geometryAssets?.get(component.geometry.sourceSha256) ?? null)
+                }
+              />
+            ))}
+          {options.showCg && (
+            <group position={bodyToScene(cgBodyM)}>
+              <mesh>
+                <sphereGeometry args={[0.055, 20, 20]} />
+                <meshBasicMaterial color="#ffbe59" depthTest={false} />
+              </mesh>
+              <Line
+                points={[
+                  [-0.16, 0, 0],
+                  [0.16, 0, 0]
+                ]}
+                color="#ffbe59"
+                lineWidth={1.4}
+              />
+              <Line
+                points={[
+                  [0, -0.16, 0],
+                  [0, 0.16, 0]
+                ]}
+                color="#ffbe59"
+                lineWidth={1.4}
+              />
+              <Line
+                points={[
+                  [0, 0, -0.16],
+                  [0, 0, 0.16]
+                ]}
+                color="#ffbe59"
+                lineWidth={1.4}
+              />
+            </group>
+          )}
+        </group>
+      </PartContextMenuContext.Provider>
       {flightPose === undefined ? (
         <OrbitControls
           makeDefault

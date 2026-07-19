@@ -46,6 +46,37 @@ endsolid wing`
     expect(result.sourceSha256).toMatch(/^[a-f0-9]{64}$/u);
   });
 
+  it("keeps disconnected STL shapes together in one imported mesh", async () => {
+    const file = new File(
+      [
+        `solid whole_drone
+facet normal 0 0 1
+outer loop
+vertex 0 0 0
+vertex 1 0 0
+vertex 0 1 0
+endloop
+endfacet
+facet normal 0 0 1
+outer loop
+vertex 10 0 0
+vertex 11 0 0
+vertex 10 1 0
+endloop
+endfacet
+endsolid whole_drone`
+      ],
+      "whole-drone.stl"
+    );
+    const result = await inspectGeometryFile(file, {
+      requestedFormat: "stl",
+      originalUnits: "m"
+    });
+
+    expect(result.mesh?.faces).toHaveLength(2);
+    expect(result.inspection?.connectedBodyCount).toBe(2);
+  });
+
   it("supports relative OBJ face indices", async () => {
     const file = new File(["v 0 0 0\nv 1 0 0\nv 0 1 0\nf -3 -2 -1\n"], "surface.obj");
     const result = await inspectGeometryFile(file, {

@@ -178,7 +178,9 @@ const MAX_LOCAL_TRIANGLES = 1_000_000;
 
 export function requireSingleGeometryFile(files: readonly File[]): File {
   if (files.length !== 1) {
-    throw new Error("Drop exactly one source file. Import separate components one at a time.");
+    throw new Error(
+      "Drop exactly one source file. That file can contain one part or a whole drone model."
+    );
   }
   const file = files[0];
   if (file === undefined) throw new Error("The drop did not contain a readable local file.");

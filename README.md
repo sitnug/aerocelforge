@@ -33,10 +33,17 @@ top-bar controls or **Settings** to choose the dark **Cockpit** theme or reveal
 specialist **Advanced** tools. These view choices do not change project data.
 
 To add geometry, open **3D model** and choose **Import model**. Select a model
-type (or auto-detect), confirm source units and semantic component type, then
-choose one file or drag it onto the drop zone. Locally supported triangle formats
-are inspected before **Add to aircraft** becomes available; CAD and articulated
-assembly formats remain explicitly gated on their named external adapters.
+type (or auto-detect), confirm source units, and choose whether the file is one
+complete part or a whole drone model. Then choose one file or drag it onto the
+drop zone. Every shape in a whole-model STL stays together as one selectable
+object. Locally supported triangle formats are inspected before they can be
+added; CAD and articulated assembly formats remain explicitly gated on their
+named external adapters.
+
+Select a part and press **Delete** or **Backspace** to remove it after a safety
+check. Right-click a 3D part, navigator item, or Parts table row to edit or delete
+it. Deleting a parent also lists and removes its attached children, joints, and
+motor setup so saved projects never contain broken links.
 
 To fly the loaded vehicle, open **Fly**. The Flight Simulator provides
 on-screen Mode 2 sticks, keyboard and standard gamepad control, hover and cruise

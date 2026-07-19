@@ -56,7 +56,7 @@ import {
   Upload,
   Wind
 } from "lucide-react";
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { WorkspaceId } from "../App";
 import type { AnalysisOptions, RapidAnalysis } from "../lib/analysis";
 import { createDiagnosticBundle, hashText, writeReport, type SystemProfile } from "../lib/native";
@@ -74,6 +74,8 @@ interface WorkspaceContentProps {
   readonly selectedComponent: VehicleComponent | null;
   readonly selectedId: string | null;
   readonly onSelect: (id: string | null) => void;
+  readonly onPartContextMenu: (id: string, clientX: number, clientY: number) => void;
+  readonly onRequestPartDelete: (id: string) => void;
   readonly analysis: RapidAnalysis;
   readonly analysisOptions: AnalysisOptions;
   readonly setAnalysisOptions: Dispatch<SetStateAction<AnalysisOptions>>;
@@ -273,6 +275,8 @@ function downloadJson(fileName: string, value: unknown): void {
 
 function GeometryWorkspace(props: WorkspaceContentProps) {
   const selected = props.selectedComponent;
+  const [nameDraft, setNameDraft] = useState(selected?.name ?? "");
+  useEffect(() => setNameDraft(selected?.name ?? ""), [selected?.id, selected?.name]);
   const disallowedParentIds = useMemo(() => {
     const blocked = new Set<string>();
     if (selected === null) return blocked;
@@ -305,6 +309,15 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
         )
       }
     }));
+  };
+  const commitSelectedName = (): void => {
+    if (selected === null) return;
+    const name = nameDraft.trim();
+    if (name === "") {
+      setNameDraft(selected.name);
+      return;
+    }
+    if (name !== selected.name) updateSelected((component) => ({ ...component, name }));
   };
   const updateTransformVector = (
     field: "translationM" | "rotationRad" | "scale",
@@ -403,6 +416,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             project={props.project}
             selectedId={props.selectedId}
             onSelect={props.onSelect}
+            onPartContextMenu={props.onPartContextMenu}
             options={props.viewportOptions}
             cgBodyM={props.analysis.mass.centerOfGravityM}
             slipstreamRadiusM={0.16}
@@ -432,7 +446,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
           <span>
             CG {props.analysis.mass.centerOfGravityM.map((value) => value.toFixed(3)).join(", ")} m
           </span>
-          <span>Turn: drag · Move: shift-drag · Zoom: pinch or scroll</span>
+          <span>Turn: drag · Zoom: scroll · Edit: right-click · Delete: select, then Delete</span>
         </div>
       </section>
       <aside className="inspector-panel">
@@ -455,6 +469,24 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                   lets calculations treat it correctly.
                 </InfoTip>
               </h3>
+              <div className="readout-field">
+                <label htmlFor="inspector-component-name">Name</label>
+                <input
+                  id="inspector-component-name"
+                  className="inspector-control inspector-control--text"
+                  value={nameDraft}
+                  maxLength={80}
+                  onChange={(event) => setNameDraft(event.target.value)}
+                  onBlur={commitSelectedName}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") event.currentTarget.blur();
+                    if (event.key === "Escape") {
+                      setNameDraft(selected.name);
+                      event.currentTarget.blur();
+                    }
+                  }}
+                />
+              </div>
               <div className="readout-field">
                 <label htmlFor="inspector-component-type">Type</label>
                 <select
@@ -522,6 +554,13 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                   </label>
                 </div>
               )}
+              <button
+                type="button"
+                className="button button--danger button--full inspector-delete-button"
+                onClick={() => props.onRequestPartDelete(selected.id)}
+              >
+                <Trash2 size={14} /> Delete this part
+              </button>
             </section>
             <section className="inspector-section">
               <h3 className="heading-with-help">
@@ -916,6 +955,10 @@ function ComponentsWorkspace(props: WorkspaceContentProps) {
                   key={component.id}
                   className={component.id === props.selectedId ? "data-row--selected" : ""}
                   onClick={() => props.onSelect(component.id)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    props.onPartContextMenu(component.id, event.clientX, event.clientY);
+                  }}
                 >
                   <td>
                     <span className="table-component">
