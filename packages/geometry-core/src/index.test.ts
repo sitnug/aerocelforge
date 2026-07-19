@@ -35,6 +35,28 @@ describe("mesh inspection", () => {
     expect(result.surfaceAreaM2).toBeCloseTo(6, 12);
     expect(result.watertight).toBe(true);
     expect(result.status).toBe("pass");
+    expect(result.connectedBodyCount).toBe(1);
+    expect(result.minimumTriangleQuality).toBeGreaterThan(0.8);
+    expect(result.thinAxisRatio).toBe(1);
+  });
+
+  it("detects disconnected triangle islands", () => {
+    const result = inspectTriangleMesh({
+      vertices: [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0],
+        [3, 0, 0],
+        [4, 0, 0],
+        [3, 1, 0]
+      ],
+      faces: [
+        [0, 1, 2],
+        [3, 4, 5]
+      ]
+    });
+    expect(result.connectedBodyCount).toBe(2);
+    expect(result.notes.some((note) => note.includes("disconnected"))).toBe(true);
   });
 });
 

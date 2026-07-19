@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -167,6 +168,27 @@ fn safe_file_name(file_name: &str, extension: &str) -> Result<String, String> {
     Ok(format!("{base}{extension}"))
 }
 
+fn safe_import_file_name(file_name: &str) -> Result<String, String> {
+    if file_name.is_empty()
+        || file_name.len() > 180
+        || file_name.starts_with('.')
+        || file_name.contains("..")
+        || !file_name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.' | ' ')
+        })
+    {
+        return Err("Import file name contains unsupported characters".to_string());
+    }
+    Ok(file_name.to_string())
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 64
+        && value
+            .chars()
+            .all(|character| character.is_ascii_hexdigit() && !character.is_ascii_uppercase())
+}
+
 fn managed_directory(app: &tauri::AppHandle, child: &str) -> Result<PathBuf, String> {
     let root = app
         .path()
@@ -307,6 +329,66 @@ fn write_report(app: tauri::AppHandle, file_name: String, html: String) -> Resul
 }
 
 #[tauri::command]
+fn archive_geometry_source(
+    app: tauri::AppHandle,
+    file_name: String,
+    source_sha256: String,
+    bytes: Vec<u8>,
+) -> Result<String, String> {
+    const MAX_SOURCE_BYTES: usize = 25 * 1024 * 1024;
+    if bytes.is_empty() || bytes.len() > MAX_SOURCE_BYTES {
+        return Err("Geometry source must contain 1 byte to 25 MB".to_string());
+    }
+    if !valid_sha256(&source_sha256) {
+        return Err("Geometry source SHA-256 is invalid".to_string());
+    }
+    let actual_sha256 = format!("{:x}", Sha256::digest(&bytes));
+    if actual_sha256 != source_sha256 {
+        return Err("Geometry source content does not match its SHA-256".to_string());
+    }
+    let file_name = safe_import_file_name(&file_name)?;
+    let directory = managed_directory(&app, "imports")?.join(&source_sha256);
+    fs::create_dir_all(&directory)
+        .map_err(|error| format!("Could not create geometry archive directory: {error}"))?;
+    let target = directory.join(&file_name);
+    let temporary = directory.join(format!("{file_name}.tmp"));
+    fs::write(&temporary, bytes)
+        .map_err(|error| format!("Could not write geometry archive: {error}"))?;
+    fs::rename(&temporary, &target)
+        .map_err(|error| format!("Could not atomically archive geometry source: {error}"))?;
+    Ok(format!("managed-import://{source_sha256}/{file_name}"))
+}
+
+#[tauri::command]
+fn load_geometry_source(
+    app: tauri::AppHandle,
+    file_name: String,
+    source_sha256: String,
+) -> Result<Vec<u8>, String> {
+    if !valid_sha256(&source_sha256) {
+        return Err("Geometry source SHA-256 is invalid".to_string());
+    }
+    let file_name = safe_import_file_name(&file_name)?;
+    let path = managed_directory(&app, "imports")?
+        .join(&source_sha256)
+        .join(file_name);
+    let bytes = fs::read(&path).map_err(|error| {
+        format!(
+            "Could not read archived geometry {}: {error}",
+            path.display()
+        )
+    })?;
+    if bytes.is_empty() || bytes.len() > 25 * 1024 * 1024 {
+        return Err("Archived geometry source is empty or exceeds 25 MB".to_string());
+    }
+    let actual_sha256 = format!("{:x}", Sha256::digest(&bytes));
+    if actual_sha256 != source_sha256 {
+        return Err("Archived geometry source failed its SHA-256 integrity check".to_string());
+    }
+    Ok(bytes)
+}
+
+#[tauri::command]
 fn create_diagnostic_bundle(
     app: tauri::AppHandle,
     request: DiagnosticRequest,
@@ -345,6 +427,8 @@ pub fn run() {
             load_project,
             list_projects,
             write_report,
+            archive_geometry_source,
+            load_geometry_source,
             create_diagnostic_bundle
         ])
         .run(tauri::generate_context!())
@@ -353,7 +437,7 @@ pub fn run() {
 
 #[cfg(test)]
 mod tests {
-    use super::{redact_diagnostic_text, safe_file_name};
+    use super::{redact_diagnostic_text, safe_file_name, safe_import_file_name, valid_sha256};
 
     #[test]
     fn project_file_names_reject_traversal() {
@@ -367,5 +451,13 @@ mod tests {
         let redacted = redact_diagnostic_text(input);
         assert!(!redacted.contains("abc123"));
         assert!(redacted.contains("normal convergence warning"));
+    }
+
+    #[test]
+    fn import_names_and_hashes_reject_traversal() {
+        assert!(safe_import_file_name("../wing.stl").is_err());
+        assert!(safe_import_file_name("wing.stl").is_ok());
+        assert!(valid_sha256(&"a".repeat(64)));
+        assert!(!valid_sha256(&"A".repeat(64)));
     }
 }

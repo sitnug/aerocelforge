@@ -14,11 +14,26 @@ bottom status bar.
 
 ## Geometry and components
 
-Use Geometry to import local STL or OBJ meshes. Confirm source units before
-accepting dimensions. The inspection panel reports bounds, area, signed/absolute
-volume, boundary edges, non-manifold edges, and watertightness. STEP, IGES, and
-VSP3 require their named external adapters; an unavailable capability is a hard
-gate, not a lossy fallback.
+Use Geometry and choose **Import model**. Select the model type explicitly or use
+extension auto-detection, select source units, assign a semantic component type,
+name, parent, and CFD inclusion, then either choose one local file or drag it onto
+the drop zone. The file extension must match the selected type.
+
+Built-in 3D import supports ASCII/binary STL, OBJ, self-contained glTF/GLB, PLY,
+and embedded-geometry DAE. Confirm the metre bounding box and source axes before
+**Add to assembly** is enabled. Imported geometry is shown in the viewport and
+can be translated, rotated, non-uniformly scaled, reparented, retyped, or excluded
+from CFD in the inspector. The untouched source is archived by SHA-256 and is
+restored with the project at startup.
+
+The inspection panel reports bounds, area, signed/absolute volume, connected
+bodies, duplicate and degenerate faces, boundary and non-manifold edges, likely
+inverted normals, triangle quality, thin-axis ratio, and watertightness. DAT and
+CSV coordinate files are inspected as sections only. STEP/STP, IGES/IGS, 3MF,
+VSP3, URDF, SDF, and DXF require their named external adapters; an unavailable
+capability is a hard gate, not a lossy fallback. Self-intersection,
+minimum-thickness, and healing remain geometry-service operations and are not
+claimed by the local importer.
 
 Use Components for the semantic assembly and independent joint limits. Body
 coordinates are FRD: x forward, y right, z down. Each mass item needs a value,

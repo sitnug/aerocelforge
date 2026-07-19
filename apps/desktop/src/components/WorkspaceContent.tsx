@@ -1,5 +1,15 @@
-import type { AerocelProject, VehicleComponent } from "@aerocel/simulation-schema";
-import { OpenFoamAdapter, validatePx4Mapping } from "@aerocel/solver-adapters";
+import {
+  ComponentTypeSchema,
+  type AerocelProject,
+  type VehicleComponent
+} from "@aerocel/simulation-schema";
+import type { TriangleMesh } from "@aerocel/geometry-core";
+import {
+  OpenFoamAdapter,
+  validatePx4Mapping,
+  validateRemoteHost,
+  type RemoteHostProfile
+} from "@aerocel/solver-adapters";
 import { generateEngineeringReportHtml } from "@aerocel/report-generator";
 import {
   Activity,
@@ -41,23 +51,17 @@ import {
   SlidersHorizontal,
   Sparkles,
   Terminal,
+  Trash2,
   Upload,
   Wind
 } from "lucide-react";
-import {
-  useMemo,
-  useRef,
-  useState,
-  type ChangeEvent,
-  type Dispatch,
-  type SetStateAction
-} from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { WorkspaceId } from "../App";
 import type { AnalysisOptions, RapidAnalysis } from "../lib/analysis";
-import { inspectGeometryFile, type ImportedGeometryInspection } from "../lib/importers";
 import { createDiagnosticBundle, hashText, writeReport, type SystemProfile } from "../lib/native";
 import { AircraftViewport, type ViewportOptions } from "./AircraftViewport";
 import { EngineeringPlot } from "./EngineeringPlot";
+import { GeometryImportDialog } from "./GeometryImportDialog";
 
 interface WorkspaceContentProps {
   readonly workspace: WorkspaceId;
@@ -75,6 +79,9 @@ interface WorkspaceContentProps {
   readonly recentErrors: readonly string[];
   readonly setTiltAngle: (jointId: string, angleRad: number) => void;
   readonly onOpenSetup: () => void;
+  readonly onNavigate: (workspace: WorkspaceId) => void;
+  readonly geometryAssets: ReadonlyMap<string, TriangleMesh>;
+  readonly onGeometryAsset: (sourceSha256: string, mesh: TriangleMesh) => void;
   readonly notify: (message: string) => void;
 }
 
@@ -217,20 +224,53 @@ function downloadJson(fileName: string, value: unknown): void {
 }
 
 function GeometryWorkspace(props: WorkspaceContentProps) {
-  const [importResult, setImportResult] = useState<ImportedGeometryInspection | null>(null);
-  const [importError, setImportError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const selected = props.selectedComponent;
-  const onFile = (event: ChangeEvent<HTMLInputElement>): void => {
-    const file = event.target.files?.[0];
-    if (file === undefined) return;
-    setImportError(null);
-    void inspectGeometryFile(file)
-      .then(setImportResult)
-      .catch((error: unknown) =>
-        setImportError(error instanceof Error ? error.message : String(error))
-      );
-    event.target.value = "";
+  const disallowedParentIds = useMemo(() => {
+    const blocked = new Set<string>();
+    if (selected === null) return blocked;
+    blocked.add(selected.id);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const component of props.project.vehicle.components) {
+        if (
+          component.parentId !== null &&
+          blocked.has(component.parentId) &&
+          !blocked.has(component.id)
+        ) {
+          blocked.add(component.id);
+          changed = true;
+        }
+      }
+    }
+    return blocked;
+  }, [props.project.vehicle.components, selected]);
+  const updateSelected = (update: (component: VehicleComponent) => VehicleComponent): void => {
+    if (selected === null) return;
+    props.setProject((current) => ({
+      ...current,
+      updatedAt: new Date().toISOString(),
+      vehicle: {
+        ...current.vehicle,
+        components: current.vehicle.components.map((component) =>
+          component.id === selected.id ? update(component) : component
+        )
+      }
+    }));
+  };
+  const updateTransformVector = (
+    field: "translationM" | "rotationRad" | "scale",
+    axis: 0 | 1 | 2,
+    displayedValue: number
+  ): void => {
+    if (!Number.isFinite(displayedValue)) return;
+    updateSelected((component) => {
+      const vector = [...component.transform[field]] as [number, number, number];
+      vector[axis] = field === "rotationRad" ? (displayedValue * Math.PI) / 180 : displayedValue;
+      if (field === "scale" && vector[axis] <= 0) return component;
+      return { ...component, transform: { ...component.transform, [field]: vector } };
+    });
   };
   const toggleViewport = (key: keyof ViewportOptions): void =>
     props.setViewportOptions((current) => ({ ...current, [key]: !current[key] }));
@@ -242,18 +282,24 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             <button
               type="button"
               className="tool-button tool-button--primary"
-              onClick={() => inputRef.current?.click()}
+              onClick={() => setImportOpen(true)}
             >
-              <Upload size={15} /> Import
+              <Upload size={15} /> Import model
             </button>
-            <input
-              ref={inputRef}
-              type="file"
-              hidden
-              onChange={onFile}
-              accept=".stl,.obj,.step,.stp,.iges,.igs,.gltf,.glb,.ply,.3mf,.dae,.vsp3,.urdf,.sdf,.dxf,.dat,.csv"
-            />
-            <button type="button" className="tool-button" title="Measure geometry">
+            <button
+              type="button"
+              className="tool-button"
+              title="Report the selected component bounding box"
+              onClick={() =>
+                props.notify(
+                  selected === null
+                    ? "Select a component before measuring geometry."
+                    : `${selected.name}: ${selected.geometry.boundingBoxM
+                        .map((value) => value.toFixed(3))
+                        .join(" × ")} m bounding box.`
+                )
+              }
+            >
               <Ruler size={15} /> Measure
             </button>
           </div>
@@ -308,6 +354,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             options={props.viewportOptions}
             cgBodyM={props.analysis.mass.centerOfGravityM}
             slipstreamRadiusM={0.16}
+            geometryAssets={props.geometryAssets}
           />
           <div className="viewport-frame-badge">
             <strong>BODY · FRD</strong>
@@ -326,46 +373,6 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             <small>FWD</small>
           </div>
         </div>
-        {importError !== null && (
-          <div className="viewport-import-result viewport-import-result--error">
-            <AlertTriangle size={16} />
-            <span>
-              <strong>Import inspection failed</strong>
-              {importError}
-            </span>
-          </div>
-        )}
-        {importResult !== null && (
-          <div className={`viewport-import-result viewport-import-result--${importResult.status}`}>
-            {importResult.status === "inspected" ? (
-              <CheckCircle2 size={16} />
-            ) : (
-              <AlertTriangle size={16} />
-            )}
-            <span>
-              <strong>
-                {importResult.fileName} · {importResult.format}
-              </strong>
-              {importResult.explanation}
-            </span>
-            {importResult.inspection !== null && (
-              <span className="import-metrics">
-                <b>{importResult.inspection.triangleCount.toLocaleString()} triangles</b>
-                <b>
-                  {importResult.inspection.boundingBoxM
-                    .map((value) => value.toFixed(3))
-                    .join(" × ")}{" "}
-                  units
-                </b>
-                <b>
-                  {importResult.inspection.watertight
-                    ? "Watertight"
-                    : `${importResult.inspection.openEdgeCount} open edges`}
-                </b>
-              </span>
-            )}
-          </div>
-        )}
         <div className="viewport-footer">
           <span>
             <Eye size={13} /> Perspective engineering view
@@ -391,39 +398,149 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             <section className="inspector-section">
               <h3>Semantic assignment</h3>
               <div className="readout-field">
-                <span>Type</span>
-                <strong>{selected.type.replaceAll("_", " ")}</strong>
+                <label htmlFor="inspector-component-type">Type</label>
+                <select
+                  id="inspector-component-type"
+                  className="inspector-control"
+                  value={selected.type}
+                  onChange={(event) =>
+                    updateSelected((component) => ({
+                      ...component,
+                      type: event.target.value as VehicleComponent["type"]
+                    }))
+                  }
+                >
+                  {ComponentTypeSchema.options.map((type) => (
+                    <option value={type} key={type}>
+                      {type.replaceAll("_", " ")}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="readout-field">
-                <span>Parent</span>
-                <strong>
-                  {selected.parentId === null
-                    ? "Vehicle root"
-                    : (props.project.vehicle.components.find(
-                        (item) => item.id === selected.parentId
-                      )?.name ?? "Missing")}
-                </strong>
+                <label htmlFor="inspector-component-parent">Parent</label>
+                <select
+                  id="inspector-component-parent"
+                  className="inspector-control"
+                  value={selected.parentId ?? ""}
+                  onChange={(event) =>
+                    updateSelected((component) => ({
+                      ...component,
+                      parentId: event.target.value === "" ? null : event.target.value
+                    }))
+                  }
+                >
+                  <option value="">Vehicle root</option>
+                  {props.project.vehicle.components
+                    .filter((component) => !disallowedParentIds.has(component.id))
+                    .map((component) => (
+                      <option value={component.id} key={component.id}>
+                        {component.name}
+                      </option>
+                    ))}
+                </select>
               </div>
               <div className="readout-field">
                 <span>CFD surface</span>
-                <strong>{selected.cfdIncluded ? "Included" : "Excluded"}</strong>
+                <label className="compact-toggle">
+                  <input
+                    type="checkbox"
+                    checked={selected.cfdIncluded}
+                    onChange={(event) =>
+                      updateSelected((component) => ({
+                        ...component,
+                        cfdIncluded: event.target.checked
+                      }))
+                    }
+                  />
+                  {selected.cfdIncluded ? "Included" : "Excluded"}
+                </label>
               </div>
             </section>
             <section className="inspector-section">
-              <h3>Transform · metres / radians</h3>
+              <h3>Translation · body FRD metres</h3>
               <div className="vector-fields">
                 <label>
-                  X<input readOnly value={selected.transform.translationM[0].toFixed(3)} />
+                  X
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={selected.transform.translationM[0]}
+                    onChange={(event) =>
+                      updateTransformVector("translationM", 0, event.target.valueAsNumber)
+                    }
+                  />
                 </label>
                 <label>
-                  Y<input readOnly value={selected.transform.translationM[1].toFixed(3)} />
+                  Y
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={selected.transform.translationM[1]}
+                    onChange={(event) =>
+                      updateTransformVector("translationM", 1, event.target.valueAsNumber)
+                    }
+                  />
                 </label>
                 <label>
-                  Z<input readOnly value={selected.transform.translationM[2].toFixed(3)} />
+                  Z
+                  <input
+                    type="number"
+                    step="0.001"
+                    value={selected.transform.translationM[2]}
+                    onChange={(event) =>
+                      updateTransformVector("translationM", 2, event.target.valueAsNumber)
+                    }
+                  />
                 </label>
               </div>
+              <h3 className="transform-subheading">Rotation · degrees displayed</h3>
+              <div className="vector-fields">
+                {(
+                  [
+                    ["R", 0],
+                    ["P", 1],
+                    ["Y", 2]
+                  ] as const
+                ).map(([label, axis]) => (
+                  <label key={label}>
+                    {label}
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={((selected.transform.rotationRad[axis] * 180) / Math.PI).toFixed(2)}
+                      onChange={(event) =>
+                        updateTransformVector("rotationRad", axis, event.target.valueAsNumber)
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
+              <h3 className="transform-subheading">Non-uniform scale</h3>
+              <div className="vector-fields">
+                {(
+                  [
+                    ["X", 0],
+                    ["Y", 1],
+                    ["Z", 2]
+                  ] as const
+                ).map(([label, axis]) => (
+                  <label key={label}>
+                    {label}
+                    <input
+                      type="number"
+                      min="0.0001"
+                      step="0.01"
+                      value={selected.transform.scale[axis]}
+                      onChange={(event) =>
+                        updateTransformVector("scale", axis, event.target.valueAsNumber)
+                      }
+                    />
+                  </label>
+                ))}
+              </div>
               <small className="section-help">
-                Stored in the body FRD frame. Display conversion never changes project data.
+                Rotation is stored in radians. Display conversion never changes project data.
               </small>
             </section>
             <section className="inspector-section">
@@ -432,7 +549,11 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                 <FileJson size={16} />
                 <span>
                   <strong>{selected.geometry.kind.toUpperCase()}</strong>
-                  <small>{selected.geometry.source}</small>
+                  <small>
+                    {typeof selected.properties.sourceFileName === "string"
+                      ? selected.properties.sourceFileName
+                      : selected.geometry.source}
+                  </small>
                 </span>
               </div>
               <div className="readout-field">
@@ -482,6 +603,16 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
           </div>
         )}
       </aside>
+      <GeometryImportDialog
+        open={importOpen}
+        project={props.project}
+        setProject={props.setProject}
+        onClose={() => setImportOpen(false)}
+        onSelect={props.onSelect}
+        onOpenSetup={props.onOpenSetup}
+        onGeometryAsset={props.onGeometryAsset}
+        notify={props.notify}
+      />
     </div>
   );
 }
@@ -497,11 +628,21 @@ function HomeWorkspace(props: WorkspaceContentProps) {
     <div className="scroll-workspace">
       <WorkspaceHeader
         eyebrow="PROJECT OVERVIEW"
-        title="Kestrel baseline"
+        title={props.project.name}
         description="A single engineering record from geometry through flight-model evidence."
         actions={
           <>
-            <button className="button button--quiet" type="button">
+            <button
+              className="button button--quiet"
+              type="button"
+              onClick={() => {
+                downloadJson(
+                  `${props.project.name.toLowerCase().replaceAll(/[^a-z0-9]+/gu, "-")}-snapshot.json`,
+                  props.project
+                );
+                props.notify("Immutable project snapshot downloaded with the current revision.");
+              }}
+            >
               <GitBranch size={15} /> Snapshot revision
             </button>
             <button
@@ -529,6 +670,7 @@ function HomeWorkspace(props: WorkspaceContentProps) {
             }}
             cgBodyM={props.analysis.mass.centerOfGravityM}
             slipstreamRadiusM={0.16}
+            geometryAssets={props.geometryAssets}
           />
           <div className="overview-model__label">
             <Badge tone="warning">UNVALIDATED EXAMPLE</Badge>
@@ -545,8 +687,8 @@ function HomeWorkspace(props: WorkspaceContentProps) {
           <div className="readiness-list">
             <span>
               <CheckCircle2 size={16} />{" "}
-              {props.project.vehicle.components.length - geometryWarnings} inspected procedural
-              bodies
+              {props.project.vehicle.components.length - geometryWarnings} components passing
+              current geometry gates
             </span>
             <span>
               <CheckCircle2 size={16} /> {assignedMass} mass assignments
@@ -652,7 +794,14 @@ function ComponentsWorkspace(props: WorkspaceContentProps) {
         title="Components & articulated joints"
         description="Semantic bodies, parent relationships, control assignments, and independent tilt kinematics."
         actions={
-          <button type="button" className="button button--primary">
+          <button
+            type="button"
+            className="button button--primary"
+            onClick={() => {
+              props.onNavigate("geometry");
+              props.notify("Use Import model to add and inspect a semantic component.");
+            }}
+          >
             <Plus size={15} /> Add component
           </button>
         }
@@ -766,7 +915,12 @@ function MassWorkspace(props: WorkspaceContentProps) {
         title="Mass properties"
         description="SI-native aggregation with component uncertainty and the parallel-axis theorem."
         actions={
-          <button type="button" className="button button--quiet">
+          <button
+            type="button"
+            className="button button--quiet"
+            disabled
+            title="Only the takeoff mass configuration exists in this project"
+          >
             <SlidersHorizontal size={15} /> Configuration: Takeoff
           </button>
         }
@@ -1495,6 +1649,10 @@ function TransitionWorkspace(props: WorkspaceContentProps) {
 }
 
 function CfdWorkspace(props: WorkspaceContentProps) {
+  const [cfdAnalysis, setCfdAnalysis] = useState<"steady_rans" | "transient_urans">("steady_rans");
+  const [turbulenceModel, setTurbulenceModel] = useState<"kOmegaSST" | "SpalartAllmaras">(
+    "kOmegaSST"
+  );
   const openFoam = props.systemProfile?.capabilities.find(
     (capability) => capability.id === "openfoam"
   );
@@ -1502,7 +1660,7 @@ function CfdWorkspace(props: WorkspaceContentProps) {
     () => ({
       name: "kestrel-aoa4",
       solver: "openfoam" as const,
-      analysis: "steady_rans" as const,
+      analysis: cfdAnalysis,
       airspeedMS: props.analysisOptions.airspeedMS,
       angleOfAttackRad: (props.analysisOptions.angleOfAttackDeg * Math.PI) / 180,
       sideslipRad: 0,
@@ -1510,7 +1668,7 @@ function CfdWorkspace(props: WorkspaceContentProps) {
       dynamicViscosityPaS: props.analysis.atmosphere.dynamicViscosityPaS,
       referenceAreaM2: props.project.vehicle.reference.areaM2,
       referenceLengthM: props.project.vehicle.reference.chordM,
-      turbulenceModel: "kOmegaSST" as const,
+      turbulenceModel,
       domainLengthFactors: { upstream: 5, downstream: 12, lateral: 6 },
       mesh: {
         targetBaseCellM: 0.08,
@@ -1533,7 +1691,7 @@ function CfdWorkspace(props: WorkspaceContentProps) {
         swirlTorqueNm: props.analysis.propeller.torqueNm
       }))
     }),
-    [props]
+    [cfdAnalysis, props, turbulenceModel]
   );
   const adapter = useMemo(() => new OpenFoamAdapter(), []);
   const validationIssues = adapter.validate(caseInput);
@@ -1551,12 +1709,9 @@ function CfdWorkspace(props: WorkspaceContentProps) {
             <button
               type="button"
               className="button button--primary"
-              disabled={openFoam?.available !== true || validationIssues.length > 0}
-              title={
-                openFoam?.available === true
-                  ? "Execution service requires a verified backend"
-                  : "OpenFOAM was not detected"
-              }
+              disabled
+              title="Export the verified case manifest first; direct solver submission is not connected in this build"
+              onClick={() => props.notify("Direct OpenFOAM submission is not connected.")}
             >
               <Play size={15} /> Launch solver
             </button>
@@ -1586,16 +1741,26 @@ function CfdWorkspace(props: WorkspaceContentProps) {
           <div className="form-grid">
             <label>
               <span>Analysis</span>
-              <select defaultValue="steady">
-                <option value="steady">Steady RANS</option>
-                <option value="transient">Transient URANS</option>
+              <select
+                value={cfdAnalysis}
+                onChange={(event) =>
+                  setCfdAnalysis(event.target.value as "steady_rans" | "transient_urans")
+                }
+              >
+                <option value="steady_rans">Steady RANS</option>
+                <option value="transient_urans">Transient URANS</option>
               </select>
             </label>
             <label>
               <span>Turbulence</span>
-              <select defaultValue="sst">
-                <option value="sst">k-ω SST</option>
-                <option value="sa">Spalart–Allmaras</option>
+              <select
+                value={turbulenceModel}
+                onChange={(event) =>
+                  setTurbulenceModel(event.target.value as "kOmegaSST" | "SpalartAllmaras")
+                }
+              >
+                <option value="kOmegaSST">k-ω SST</option>
+                <option value="SpalartAllmaras">Spalart–Allmaras</option>
               </select>
             </label>
             <label>
@@ -1772,7 +1937,9 @@ function Px4Workspace(props: WorkspaceContentProps) {
             <button
               className="button button--primary"
               type="button"
-              disabled={px4?.available !== true || issues.length > 0}
+              disabled
+              title="The live MAVLink/Gazebo transport is not connected in this build"
+              onClick={() => props.notify("Live PX4 SITL transport is not connected.")}
             >
               <Play size={15} /> Start SITL
             </button>
@@ -2182,7 +2349,12 @@ function ResultsWorkspace(props: WorkspaceContentProps) {
         title="Baseline evidence ledger"
         description="Every value exposes its source, fidelity, and quality state. Missing solver results remain missing."
         actions={
-          <button className="button button--quiet" type="button">
+          <button
+            className="button button--quiet"
+            type="button"
+            disabled
+            title="Create and retain at least two project snapshots before comparing revisions"
+          >
             <GitBranch size={15} /> Compare revision
           </button>
         }
@@ -2605,6 +2777,40 @@ function ReportsWorkspace(props: WorkspaceContentProps) {
 
 function SettingsWorkspace(props: WorkspaceContentProps) {
   const [diagnosing, setDiagnosing] = useState(false);
+  const [hostEditorOpen, setHostEditorOpen] = useState(false);
+  const [hostProfiles, setHostProfiles] = useState<readonly RemoteHostProfile[]>(() => {
+    try {
+      const parsed: unknown = JSON.parse(localStorage.getItem("aerocel.remoteProfiles") ?? "[]");
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter((profile): profile is RemoteHostProfile => {
+        if (typeof profile !== "object" || profile === null) return false;
+        const candidate = profile as Partial<RemoteHostProfile>;
+        return (
+          typeof candidate.id === "string" &&
+          typeof candidate.displayName === "string" &&
+          typeof candidate.hostname === "string" &&
+          typeof candidate.port === "number" &&
+          typeof candidate.username === "string" &&
+          (candidate.scheduler === "none" || candidate.scheduler === "slurm") &&
+          typeof candidate.remoteRoot === "string"
+        );
+      });
+    } catch {
+      return [];
+    }
+  });
+  const [hostDraft, setHostDraft] = useState<RemoteHostProfile>(() => ({
+    id: crypto.randomUUID(),
+    displayName: "Solver workstation",
+    hostname: "solver.example.org",
+    port: 22,
+    username: "aerocel",
+    identityFileReference: null,
+    scheduler: "none",
+    remoteRoot: "/srv/aerocel/cases",
+    cpuLimit: 16,
+    memoryLimitGb: 32
+  }));
   const modes = [
     { id: "native_mac", label: "Native Mac", detail: "Light and moderate analyses" },
     { id: "local_linux", label: "Local Linux", detail: "Container or VM solvers" },
@@ -2620,6 +2826,19 @@ function SettingsWorkspace(props: WorkspaceContentProps) {
         )
       )
       .finally(() => setDiagnosing(false));
+  };
+  const saveHostProfile = (): void => {
+    const issues = [...validateRemoteHost(hostDraft)];
+    if (hostDraft.displayName.trim() === "") issues.push("Display name is required");
+    if (issues.length > 0) {
+      props.notify(`Remote profile not saved: ${issues.join("; ")}`);
+      return;
+    }
+    const updated = [...hostProfiles.filter((profile) => profile.id !== hostDraft.id), hostDraft];
+    localStorage.setItem("aerocel.remoteProfiles", JSON.stringify(updated));
+    setHostProfiles(updated);
+    setHostEditorOpen(false);
+    props.notify("Remote host profile saved locally without credentials.");
   };
   return (
     <div className="scroll-workspace">
@@ -2714,21 +2933,153 @@ function SettingsWorkspace(props: WorkspaceContentProps) {
             </span>
             <LockKeyhole size={18} />
           </div>
-          <div className="empty-state">
-            <Server size={28} />
-            <strong>No remote solver host configured</strong>
-            <p>
-              Keys stay in the SSH agent or user keychain. Private key material is never stored
-              inside a project.
-            </p>
-            <button
-              className="button button--quiet"
-              type="button"
-              onClick={() => props.notify("Remote profile editor is staged; no host was modified.")}
-            >
-              <Plus size={15} /> Add host profile
-            </button>
-          </div>
+          {hostProfiles.length === 0 && !hostEditorOpen && (
+            <div className="empty-state">
+              <Server size={28} />
+              <strong>No remote solver host configured</strong>
+              <p>
+                Keys stay in the SSH agent or user keychain. Private key material is never stored
+                inside a project.
+              </p>
+              <button
+                className="button button--quiet"
+                type="button"
+                onClick={() => setHostEditorOpen(true)}
+              >
+                <Plus size={15} /> Add host profile
+              </button>
+            </div>
+          )}
+          {hostProfiles.length > 0 && !hostEditorOpen && (
+            <div className="remote-profile-list">
+              {hostProfiles.map((profile) => (
+                <article className="remote-profile" key={profile.id}>
+                  <Server size={17} />
+                  <span>
+                    <strong>{profile.displayName}</strong>
+                    <small>
+                      {profile.username}@{profile.hostname}:{profile.port} · {profile.scheduler}
+                    </small>
+                  </span>
+                  <Badge tone={validateRemoteHost(profile).length === 0 ? "success" : "danger"}>
+                    Profile only
+                  </Badge>
+                  <button
+                    type="button"
+                    className="icon-button icon-button--quiet"
+                    aria-label={`Delete ${profile.displayName}`}
+                    onClick={() => {
+                      if (!window.confirm(`Delete remote host profile “${profile.displayName}”?`)) {
+                        return;
+                      }
+                      const updated = hostProfiles.filter(
+                        (candidate) => candidate.id !== profile.id
+                      );
+                      localStorage.setItem("aerocel.remoteProfiles", JSON.stringify(updated));
+                      setHostProfiles(updated);
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </article>
+              ))}
+              <button
+                className="button button--quiet"
+                type="button"
+                onClick={() => {
+                  setHostDraft((current) => ({ ...current, id: crypto.randomUUID() }));
+                  setHostEditorOpen(true);
+                }}
+              >
+                <Plus size={15} /> Add another host
+              </button>
+            </div>
+          )}
+          {hostEditorOpen && (
+            <div className="remote-profile-editor">
+              <div className="form-grid">
+                <label>
+                  <span>Display name</span>
+                  <input
+                    value={hostDraft.displayName}
+                    onChange={(event) =>
+                      setHostDraft((current) => ({ ...current, displayName: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  <span>Host or SSH alias</span>
+                  <input
+                    value={hostDraft.hostname}
+                    onChange={(event) =>
+                      setHostDraft((current) => ({ ...current, hostname: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  <span>Username</span>
+                  <input
+                    value={hostDraft.username}
+                    onChange={(event) =>
+                      setHostDraft((current) => ({ ...current, username: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  <span>SSH port</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="65535"
+                    value={hostDraft.port}
+                    onChange={(event) =>
+                      setHostDraft((current) => ({ ...current, port: event.target.valueAsNumber }))
+                    }
+                  />
+                </label>
+                <label>
+                  <span>Remote case root</span>
+                  <input
+                    value={hostDraft.remoteRoot}
+                    onChange={(event) =>
+                      setHostDraft((current) => ({ ...current, remoteRoot: event.target.value }))
+                    }
+                  />
+                </label>
+                <label>
+                  <span>Scheduler</span>
+                  <select
+                    value={hostDraft.scheduler}
+                    onChange={(event) =>
+                      setHostDraft((current) => ({
+                        ...current,
+                        scheduler: event.target.value as "none" | "slurm"
+                      }))
+                    }
+                  >
+                    <option value="none">Direct process</option>
+                    <option value="slurm">Slurm</option>
+                  </select>
+                </label>
+              </div>
+              <Notice tone="info" title="Credential boundary">
+                This stores connection metadata only. Configure the hostname in your SSH config and
+                load keys through the SSH agent.
+              </Notice>
+              <div className="editor-actions">
+                <button
+                  type="button"
+                  className="button button--quiet"
+                  onClick={() => setHostEditorOpen(false)}
+                >
+                  Cancel
+                </button>
+                <button type="button" className="button button--primary" onClick={saveHostProfile}>
+                  <Save size={15} /> Save profile
+                </button>
+              </div>
+            </div>
+          )}
         </section>
         <section className="section-card">
           <div className="section-card__header">

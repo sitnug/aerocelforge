@@ -101,7 +101,8 @@ export async function listProjects(): Promise<readonly ProjectSummary[]> {
       } catch {
         return [];
       }
-    });
+    })
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
 }
 
 function downloadText(fileName: string, content: string, mimeType: string): string {
@@ -120,6 +121,76 @@ export async function writeReport(fileName: string, html: string): Promise<strin
   return Promise.resolve(
     downloadText(`${fileName.replace(/\.html$/u, "")}.html`, html, "text/html")
   );
+}
+
+function openAssetDatabase(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("aerocel-forge-assets", 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains("geometry")) {
+        request.result.createObjectStore("geometry");
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error ?? new Error("Could not open geometry archive"));
+  });
+}
+
+export async function archiveGeometrySource(file: File, sourceSha256: string): Promise<string> {
+  const buffer = await file.arrayBuffer();
+  if (isNativeDesktop()) {
+    return invoke<string>("archive_geometry_source", {
+      fileName: file.name,
+      sourceSha256,
+      bytes: [...new Uint8Array(buffer)]
+    });
+  }
+  const database = await openAssetDatabase();
+  await new Promise<void>((resolve, reject) => {
+    const transaction = database.transaction("geometry", "readwrite");
+    transaction.objectStore("geometry").put(
+      {
+        fileName: file.name,
+        mimeType: file.type,
+        sourceSha256,
+        bytes: buffer
+      },
+      sourceSha256
+    );
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () =>
+      reject(transaction.error ?? new Error("Could not archive geometry source"));
+  });
+  database.close();
+  return `browser-import://${sourceSha256}/${encodeURIComponent(file.name)}`;
+}
+
+export async function loadGeometrySource(
+  fileName: string,
+  sourceSha256: string
+): Promise<File | null> {
+  if (isNativeDesktop()) {
+    const bytes = await invoke<number[]>("load_geometry_source", { fileName, sourceSha256 });
+    return new File([new Uint8Array(bytes)], fileName);
+  }
+  const database = await openAssetDatabase();
+  const record = await new Promise<
+    | {
+        readonly fileName: string;
+        readonly mimeType: string;
+        readonly sourceSha256: string;
+        readonly bytes: ArrayBuffer;
+      }
+    | undefined
+  >((resolve, reject) => {
+    const transaction = database.transaction("geometry", "readonly");
+    const request = transaction.objectStore("geometry").get(sourceSha256);
+    request.onsuccess = () => resolve(request.result as typeof record);
+    request.onerror = () => reject(request.error ?? new Error("Could not restore geometry source"));
+  });
+  database.close();
+  if (record === undefined || record.sourceSha256 !== sourceSha256) return null;
+  return new File([record.bytes], record.fileName, { type: record.mimeType });
 }
 
 export async function createDiagnosticBundle(

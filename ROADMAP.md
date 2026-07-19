@@ -13,11 +13,22 @@ it does not imply certification or parity with a dedicated commercial tool.
 
 ## 2. Geometry
 
-- [x] local ASCII/binary STL and OBJ parsing with topology inspection.
-- [x] component transforms, selection, dimensions, mass, CG, and inertia.
-- [x] watertightness, boundary/non-manifold edge, area, volume, and bounds checks.
-- [x] STEP/IGES/OpenVSP import is explicitly routed to an external OCC adapter;
-      it is not mislabeled as locally supported.
+- [x] explicit model-type picker plus file picker and drag-and-drop import.
+- [x] local ASCII/binary STL, OBJ, self-contained glTF/GLB, PLY, and embedded DAE
+      parsing with scene transforms and bounded topology inspection.
+- [x] unit-to-metre conversion, dimension confirmation, SHA-256 identity, untouched
+      source archiving, startup restoration, and semantic assembly assignment.
+- [x] editable component parent, CFD inclusion, translation, rotation, and
+      non-uniform scale after import.
+- [x] watertightness, boundary/non-manifold and duplicate/degenerate faces,
+      connected bodies, normals, triangle quality, thin-axis, area, volume, and
+      bounds checks.
+- [x] DAT and CSV coordinate sections are inspected without pretending they are
+      volumetric components.
+- [x] STEP/STP, IGES/IGS, 3MF, VSP3, URDF, SDF, and DXF are explicitly routed to
+      named external adapters; they are never flattened or mislabeled as local.
+- [ ] isolated self-intersection and minimum-thickness analysis, auditable healing,
+      mirroring/alignment/snapping/arrays, and production external format adapters.
 
 ## 3. Propulsion and joints
 
@@ -78,3 +89,5 @@ it does not imply certification or parity with a dedicated commercial tool.
       require organization credentials and target hardware.
 
 The next engineering priorities are tracked in [TODO.md](TODO.md).
+The complete readiness boundary is recorded in
+[PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).

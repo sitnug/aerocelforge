@@ -1,6 +1,7 @@
 import { Line, OrbitControls } from "@react-three/drei";
 import { Canvas, type ThreeEvent } from "@react-three/fiber";
 import type { AerocelProject, VehicleComponent } from "@aerocel/simulation-schema";
+import type { TriangleMesh } from "@aerocel/geometry-core";
 import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 
@@ -21,6 +22,7 @@ interface AircraftViewportProps {
   readonly options: ViewportOptions;
   readonly cgBodyM: readonly [number, number, number];
   readonly slipstreamRadiusM: number;
+  readonly geometryAssets?: ReadonlyMap<string, TriangleMesh>;
 }
 
 const bodyToScene = (position: readonly [number, number, number]): [number, number, number] => [
@@ -175,18 +177,82 @@ function SurfaceMesh({
   );
 }
 
+function ImportedComponentMesh({
+  component,
+  mesh,
+  selected,
+  onSelect
+}: {
+  readonly component: VehicleComponent;
+  readonly mesh: TriangleMesh | null;
+  readonly selected: boolean;
+  readonly onSelect: (id: string) => void;
+}) {
+  const geometry = useMemo(() => {
+    if (mesh === null) return null;
+    const converted = new Float32Array(mesh.vertices.length * 3);
+    mesh.vertices.forEach((vertex, index) => {
+      const scene = bodyToScene(vertex);
+      converted[index * 3] = scene[0];
+      converted[index * 3 + 1] = scene[1];
+      converted[index * 3 + 2] = scene[2];
+    });
+    const buffer = new THREE.BufferGeometry();
+    buffer.setAttribute("position", new THREE.BufferAttribute(converted, 3));
+    buffer.setIndex(mesh.faces.flatMap((face) => [...face]));
+    buffer.computeVertexNormals();
+    return buffer;
+  }, [mesh]);
+  useEffect(() => () => geometry?.dispose(), [geometry]);
+  const position = bodyToScene(component.transform.translationM);
+  const [roll, pitch, yaw] = component.transform.rotationRad;
+  const [scaleX, scaleY, scaleZ] = component.transform.scale;
+  return (
+    <group position={position} rotation={[roll, -yaw, pitch]} scale={[scaleX, scaleZ, scaleY]}>
+      <Selectable component={component} selected={selected} onSelect={onSelect}>
+        {geometry === null ? (
+          <mesh castShadow receiveShadow>
+            <boxGeometry
+              args={[
+                Math.max(component.geometry.boundingBoxM[0], 0.01),
+                Math.max(component.geometry.boundingBoxM[2], 0.01),
+                Math.max(component.geometry.boundingBoxM[1], 0.01)
+              ]}
+            />
+            <meshBasicMaterial color="#ffb45b" wireframe transparent opacity={0.72} />
+          </mesh>
+        ) : (
+          <mesh geometry={geometry} castShadow receiveShadow>
+            <meshStandardMaterial
+              color={selected ? "#77f2d2" : component.visual.color}
+              roughness={0.52}
+              metalness={0.06}
+              side={THREE.DoubleSide}
+              transparent={component.visual.opacity < 1}
+              opacity={component.visual.opacity}
+              emissive={selected ? "#123f35" : "#000000"}
+            />
+          </mesh>
+        )}
+      </Selectable>
+    </group>
+  );
+}
+
 function ComponentMesh({
   component,
   selected,
   onSelect,
   tiltRad,
-  options
+  options,
+  importedMesh
 }: {
   readonly component: VehicleComponent;
   readonly selected: boolean;
   readonly onSelect: (id: string) => void;
   readonly tiltRad: number;
   readonly options: ViewportOptions;
+  readonly importedMesh: TriangleMesh | null;
 }) {
   const [x, y, z] = bodyToScene(component.transform.translationM);
   const commonMaterial = (
@@ -200,6 +266,17 @@ function ComponentMesh({
       side={THREE.DoubleSide}
     />
   );
+
+  if (component.geometry.kind === "mesh") {
+    return (
+      <ImportedComponentMesh
+        component={component}
+        mesh={importedMesh}
+        selected={selected}
+        onSelect={onSelect}
+      />
+    );
+  }
 
   if (component.type === "fuselage") {
     return (
@@ -348,7 +425,14 @@ function ComponentMesh({
   return null;
 }
 
-function Scene({ project, selectedId, onSelect, options, cgBodyM }: AircraftViewportProps) {
+function Scene({
+  project,
+  selectedId,
+  onSelect,
+  options,
+  cgBodyM,
+  geometryAssets
+}: AircraftViewportProps) {
   const motorTilt = new Map(
     project.vehicle.joints.map((joint) => [joint.childComponentId, joint.actualRad] as const)
   );
@@ -386,6 +470,11 @@ function Scene({ project, selectedId, onSelect, options, cgBodyM }: AircraftView
               onSelect={onSelect}
               tiltRad={motorTilt.get(component.id) ?? propellerTilt.get(component.id) ?? 0}
               options={options}
+              importedMesh={
+                component.geometry.sourceSha256 === null
+                  ? null
+                  : (geometryAssets?.get(component.geometry.sourceSha256) ?? null)
+              }
             />
           ))}
         {options.showCg && (

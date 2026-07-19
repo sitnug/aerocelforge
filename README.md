@@ -29,6 +29,12 @@ npm run dev
 The Kestrel tri-tilt example opens from the first-run screen. Its dimensions and
 component values are explicitly marked as illustrative user-entered data.
 
+To add geometry, open **Geometry** and choose **Import model**. Select a model
+type (or auto-detect), confirm source units and semantic component type, then
+choose one file or drag it onto the drop zone. Locally supported triangle formats
+are inspected before **Add to assembly** becomes available; CAD and articulated
+assembly formats remain explicitly gated on their named external adapters.
+
 ## Verification
 
 ```bash
@@ -55,7 +61,8 @@ npm run desktop:build
 Start with [MACOS_SETUP.md](MACOS_SETUP.md), then read
 [docs/USER_MANUAL.md](docs/USER_MANUAL.md). The technical boundaries are in
 [ARCHITECTURE.md](ARCHITECTURE.md), and validation status is recorded in
-[VALIDATION.md](VALIDATION.md).
+[VALIDATION.md](VALIDATION.md). The implementation-versus-qualification audit is
+in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
 
 ## Safety and scope
 

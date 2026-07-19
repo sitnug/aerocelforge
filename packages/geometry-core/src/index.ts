@@ -17,6 +17,9 @@ export interface MeshInspection {
   readonly nonManifoldEdgeCount: number;
   readonly duplicateFaceCount: number;
   readonly degenerateFaceCount: number;
+  readonly connectedBodyCount: number;
+  readonly minimumTriangleQuality: number;
+  readonly thinAxisRatio: number;
   readonly normalsLikelyInverted: boolean;
   readonly watertight: boolean;
   readonly status: "pass" | "warning" | "fatal";
@@ -55,6 +58,25 @@ export function inspectTriangleMesh(mesh: TriangleMesh): MeshInspection {
   let degenerateFaceCount = 0;
   let surfaceAreaM2 = 0;
   let signedVolumeM3 = 0;
+  let minimumTriangleQuality = 1;
+  const parents = mesh.vertices.map((_, index) => index);
+  const referencedVertices = new Set<number>();
+  const findRoot = (index: number): number => {
+    let root = index;
+    while (parents[root] !== root) root = parents[root] ?? root;
+    let cursor = index;
+    while (cursor !== root) {
+      const next = parents[cursor] ?? root;
+      parents[cursor] = root;
+      cursor = next;
+    }
+    return root;
+  };
+  const connect = (left: number, right: number): void => {
+    const leftRoot = findRoot(left);
+    const rightRoot = findRoot(right);
+    if (leftRoot !== rightRoot) parents[rightRoot] = leftRoot;
+  };
 
   for (const face of mesh.faces) {
     if (face.some((index) => index < 0 || index >= mesh.vertices.length)) {
@@ -75,6 +97,17 @@ export function inspectTriangleMesh(mesh: TriangleMesh): MeshInspection {
     if (area <= 1e-14) degenerateFaceCount += 1;
     surfaceAreaM2 += area;
     signedVolumeM3 += dot3(a, cross3(b, c)) / 6;
+    referencedVertices.add(face[0]);
+    referencedVertices.add(face[1]);
+    referencedVertices.add(face[2]);
+    connect(face[0], face[1]);
+    connect(face[1], face[2]);
+    const edgeSquareSum =
+      magnitude3(subtract3(b, a)) ** 2 +
+      magnitude3(subtract3(c, b)) ** 2 +
+      magnitude3(subtract3(a, c)) ** 2;
+    const quality = edgeSquareSum <= 0 ? 0 : (4 * Math.sqrt(3) * area) / edgeSquareSum;
+    minimumTriangleQuality = Math.min(minimumTriangleQuality, quality);
 
     const edges = [edgeKey(face[0], face[1]), edgeKey(face[1], face[2]), edgeKey(face[2], face[0])];
     for (const edge of edges) edgeCounts.set(edge, (edgeCounts.get(edge) ?? 0) + 1);
@@ -84,18 +117,31 @@ export function inspectTriangleMesh(mesh: TriangleMesh): MeshInspection {
   const openEdgeCount = counts.filter((count) => count === 1).length;
   const nonManifoldEdgeCount = counts.filter((count) => count > 2).length;
   const watertight = openEdgeCount === 0 && nonManifoldEdgeCount === 0;
+  const connectedBodyCount = new Set([...referencedVertices].map(findRoot)).size;
+  const dimensions: Vector3 = [
+    maximum[0] - minimum[0],
+    maximum[1] - minimum[1],
+    maximum[2] - minimum[2]
+  ];
+  const maximumDimension = Math.max(...dimensions);
+  const thinAxisRatio = maximumDimension <= 0 ? 0 : Math.min(...dimensions) / maximumDimension;
   const notes: string[] = [];
   if (openEdgeCount > 0) notes.push(`${openEdgeCount} open edges detected`);
   if (nonManifoldEdgeCount > 0) notes.push(`${nonManifoldEdgeCount} non-manifold edges detected`);
   if (duplicateFaceCount > 0) notes.push(`${duplicateFaceCount} duplicate faces detected`);
   if (degenerateFaceCount > 0) notes.push(`${degenerateFaceCount} degenerate faces detected`);
+  if (connectedBodyCount > 1) notes.push(`${connectedBodyCount} disconnected mesh bodies detected`);
+  if (minimumTriangleQuality < 0.02) {
+    notes.push(`Minimum normalized triangle quality is ${minimumTriangleQuality.toPrecision(3)}`);
+  }
+  if (thinAxisRatio < 1e-4) notes.push("Bounding box contains a very thin or zero-thickness axis");
   if (signedVolumeM3 < 0)
     notes.push("Signed volume is negative; surface normals are likely inverted");
 
   return {
     vertexCount: mesh.vertices.length,
     triangleCount: mesh.faces.length,
-    boundingBoxM: [maximum[0] - minimum[0], maximum[1] - minimum[1], maximum[2] - minimum[2]],
+    boundingBoxM: dimensions,
     surfaceAreaM2,
     signedVolumeM3,
     volumeM3: Math.abs(signedVolumeM3),
@@ -103,12 +149,18 @@ export function inspectTriangleMesh(mesh: TriangleMesh): MeshInspection {
     nonManifoldEdgeCount,
     duplicateFaceCount,
     degenerateFaceCount,
+    connectedBodyCount,
+    minimumTriangleQuality,
+    thinAxisRatio,
     normalsLikelyInverted: signedVolumeM3 < 0,
     watertight,
     status:
       nonManifoldEdgeCount > 0 || degenerateFaceCount > 0
         ? "fatal"
-        : watertight
+        : watertight &&
+            connectedBodyCount === 1 &&
+            minimumTriangleQuality >= 0.02 &&
+            thinAxisRatio >= 1e-4
           ? "pass"
           : "warning",
     notes

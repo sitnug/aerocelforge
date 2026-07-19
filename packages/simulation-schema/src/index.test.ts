@@ -99,5 +99,26 @@ describe("AerocelProjectSchema", () => {
     };
 
     expect(AerocelProjectSchema.safeParse(project).success).toBe(false);
+
+    const secondId = "a78e0e63-3ba6-4b1f-ac0e-65c0f032a65c";
+    const cyclicProject = {
+      ...project,
+      vehicle: {
+        ...project.vehicle,
+        joints: [],
+        components: [
+          { ...project.vehicle.components[0], parentId: secondId },
+          {
+            ...project.vehicle.components[0],
+            id: secondId,
+            name: "Cyclic child",
+            parentId: project.vehicle.components[0]?.id
+          }
+        ]
+      }
+    };
+    const cyclicResult = AerocelProjectSchema.safeParse(cyclicProject);
+    expect(cyclicResult.success).toBe(false);
+    expect(cyclicResult.error?.issues.some((issue) => issue.message.includes("cycle"))).toBe(true);
   });
 });

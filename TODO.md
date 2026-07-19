@@ -4,6 +4,11 @@
 
 - Implement an OpenCascade geometry service for STEP/IGES healing, tessellation,
   measurements, and unit confirmation.
+- Add isolated self-intersection and minimum-thickness analysis plus auditable
+  mesh repair, face/axis alignment, snapping, mirroring, symmetry, and arrays.
+- Connect inspected DAT/CSV sections to lifting-surface airfoil assignment.
+- Add managed project create/open/duplicate/import UI and retained revision
+  snapshots for comparison.
 - Add an A2 vortex-lattice solver with Trefftz-plane verification, then an A3
   panel adapter with published validation cases.
 - Complete live MAVLink transport and versioned PX4/Gazebo model generators.

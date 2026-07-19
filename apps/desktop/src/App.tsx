@@ -1,4 +1,5 @@
 import type { AerocelProject, VehicleComponent } from "@aerocel/simulation-schema";
+import type { TriangleMesh } from "@aerocel/geometry-core";
 import {
   Box,
   ChartNoAxesCombined,
@@ -13,7 +14,7 @@ import {
   GitCompareArrows,
   Home,
   Layers3,
-  Map,
+  Map as MapIcon,
   PanelLeftClose,
   PlaneTakeoff,
   Save,
@@ -28,8 +29,17 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { runRapidAnalysis, defaultAnalysisOptions, type AnalysisOptions } from "./lib/analysis";
+import { inspectGeometryFile } from "./lib/importers";
 import { kestrelProject } from "./lib/kestrel";
-import { getSystemProfile, isNativeDesktop, saveProject, type SystemProfile } from "./lib/native";
+import {
+  getSystemProfile,
+  isNativeDesktop,
+  listProjects,
+  loadGeometrySource,
+  loadProject,
+  saveProject,
+  type SystemProfile
+} from "./lib/native";
 import { WorkspaceContent } from "./components/WorkspaceContent";
 import type { ViewportOptions } from "./components/AircraftViewport";
 import "./styles.css";
@@ -93,7 +103,7 @@ const workspaces: readonly WorkspaceDefinition[] = [
     id: "mission",
     label: "Mission simulation",
     shortLabel: "Mission",
-    icon: Map,
+    icon: MapIcon,
     group: "analyze"
   },
   {
@@ -187,20 +197,66 @@ function ActivityRail({
 function ComponentNavigator({
   project,
   selectedId,
-  onSelect
+  onSelect,
+  onToggle
 }: {
   readonly project: AerocelProject;
   readonly selectedId: string | null;
   readonly onSelect: (id: string) => void;
+  readonly onToggle: () => void;
 }) {
   const groups = [
     {
       label: "Airframe",
-      types: ["fuselage", "wing", "horizontal_stabilizer", "vertical_stabilizer"]
+      types: [
+        "fuselage",
+        "wing",
+        "horizontal_stabilizer",
+        "vertical_stabilizer",
+        "canard",
+        "boom",
+        "pylon",
+        "nacelle",
+        "fairing",
+        "control_surface",
+        "flap",
+        "aileron",
+        "elevator",
+        "rudder",
+        "elevon",
+        "flaperon",
+        "spoiler",
+        "air_brake",
+        "landing_gear",
+        "wheel"
+      ]
     },
-    { label: "Propulsion", types: ["motor", "propeller", "rotor", "tilt_mechanism"] },
-    { label: "Systems", types: ["battery", "payload", "sensor", "flight_controller"] }
-  ] as const;
+    {
+      label: "Propulsion",
+      types: ["motor", "propeller", "rotor", "duct", "tilt_mechanism", "servo", "esc"]
+    },
+    {
+      label: "Systems",
+      types: [
+        "battery",
+        "fuel_tank",
+        "flight_controller",
+        "camera",
+        "lidar",
+        "gps",
+        "payload",
+        "ballast",
+        "parachute",
+        "generic_mass",
+        "collision_only",
+        "visual_only",
+        "cfd_excluded"
+      ]
+    }
+  ] satisfies readonly {
+    readonly label: string;
+    readonly types: readonly VehicleComponent["type"][];
+  }[];
   return (
     <aside className="navigator-panel">
       <div className="navigator-project">
@@ -219,6 +275,7 @@ function ComponentNavigator({
           type="button"
           aria-label="Collapse navigator"
           title="Collapse navigator"
+          onClick={onToggle}
         >
           <PanelLeftClose size={14} />
         </button>
@@ -226,7 +283,7 @@ function ComponentNavigator({
       <div className="component-tree">
         {groups.map((group) => {
           const components = project.vehicle.components.filter((component) =>
-            group.types.includes(component.type as never)
+            (group.types as readonly VehicleComponent["type"][]).includes(component.type)
           );
           return (
             <section key={group.label} className="component-group">
@@ -479,6 +536,11 @@ function SetupWizard({
 
 export default function App() {
   const [project, setProject] = useState<AerocelProject>(kestrelProject);
+  const [geometryAssets, setGeometryAssets] = useState<ReadonlyMap<string, TriangleMesh>>(
+    () => new Map()
+  );
+  const [activeProjectFileName, setActiveProjectFileName] = useState("Kestrel Baseline");
+  const [projectReady, setProjectReady] = useState(false);
   const [activeWorkspace, setActiveWorkspace] = useState<WorkspaceId>("geometry");
   const [selectedId, setSelectedId] = useState<string | null>(
     project.vehicle.components[1]?.id ?? null
@@ -515,6 +577,53 @@ export default function App() {
   );
 
   useEffect(() => {
+    let cancelled = false;
+    const restore = async (): Promise<void> => {
+      try {
+        const projects = await listProjects();
+        const latest = projects[0];
+        if (latest === undefined) return;
+        const restored = await loadProject(latest.fileName);
+        if (cancelled) return;
+        setActiveProjectFileName(latest.fileName);
+        setProject(restored);
+        setSelectedId(restored.vehicle.components[0]?.id ?? null);
+        const restoredAssets = new Map<string, TriangleMesh>();
+        for (const component of restored.vehicle.components) {
+          const sha = component.geometry.sourceSha256;
+          const sourceName = component.properties.sourceFileName;
+          if (sha === null || typeof sourceName !== "string") continue;
+          try {
+            const file = await loadGeometrySource(sourceName, sha);
+            if (file === null) continue;
+            const inspection = await inspectGeometryFile(file, {
+              requestedFormat: "auto",
+              originalUnits: component.geometry.originalUnits
+            });
+            if (inspection.mesh !== null) restoredAssets.set(sha, inspection.mesh);
+          } catch (error: unknown) {
+            const detail = error instanceof Error ? error.message : String(error);
+            setRecentErrors((current) => [
+              ...current,
+              `Geometry restore ${component.name}: ${detail}`
+            ]);
+          }
+        }
+        if (!cancelled) setGeometryAssets(restoredAssets);
+      } catch (error: unknown) {
+        const detail = error instanceof Error ? error.message : String(error);
+        setRecentErrors((current) => [...current, `Project restore: ${detail}`]);
+      } finally {
+        if (!cancelled) setProjectReady(true);
+      }
+    };
+    void restore();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     void getSystemProfile()
       .then(setSystemProfile)
       .catch((error: unknown) => {
@@ -536,10 +645,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!projectReady) return;
     setSaveState({ status: "saving", detail: "Saving…" });
     const timer = window.setTimeout(() => {
       const updated = { ...project, updatedAt: new Date().toISOString() };
-      void saveProject("Kestrel Baseline", updated)
+      void saveProject(activeProjectFileName, updated)
         .then(() =>
           setSaveState({
             status: "saved",
@@ -553,7 +663,7 @@ export default function App() {
         });
     }, 700);
     return () => window.clearTimeout(timer);
-  }, [project]);
+  }, [activeProjectFileName, project, projectReady]);
 
   useEffect(() => {
     if (toast === null) return;
@@ -583,7 +693,7 @@ export default function App() {
       <header className="titlebar" data-tauri-drag-region>
         <div className="titlebar-product" data-tauri-drag-region>
           <strong>Aerocel Forge</strong>
-          <span>0.1.0 engineering preview</span>
+          <span>0.1.0 engineering workspace</span>
         </div>
         <div className="titlebar-path" data-tauri-drag-region>
           <span>{project.name}</span>
@@ -596,7 +706,8 @@ export default function App() {
             type="button"
             onClick={() => setActiveWorkspace("settings")}
           >
-            <span className="mode-chip__dot" /> MODE A · NATIVE MAC
+            <span className="mode-chip__dot" />
+            {isNativeDesktop() ? "MODE A · NATIVE MAC" : "BROWSER PREVIEW · LOCAL ONLY"}
           </button>
           <div className={`save-state save-state--${saveState.status}`} title={saveState.detail}>
             <Save size={13} />
@@ -623,6 +734,7 @@ export default function App() {
           <ComponentNavigator
             project={project}
             selectedId={selectedId}
+            onToggle={() => setNavigatorOpen(false)}
             onSelect={(id) => {
               setSelectedId(id);
               if (activeWorkspace === "home") setActiveWorkspace("geometry");
@@ -646,6 +758,15 @@ export default function App() {
             recentErrors={recentErrors}
             setTiltAngle={setTiltAngle}
             onOpenSetup={() => setSetupOpen(true)}
+            onNavigate={setActiveWorkspace}
+            geometryAssets={geometryAssets}
+            onGeometryAsset={(sourceSha256, mesh) =>
+              setGeometryAssets((current) => {
+                const updated = new Map(current);
+                updated.set(sourceSha256, mesh);
+                return updated;
+              })
+            }
             notify={setToast}
           />
         </main>

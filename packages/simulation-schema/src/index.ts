@@ -247,6 +247,9 @@ export const AerocelProjectSchema = z
   })
   .superRefine((project, context) => {
     const componentIds = new Set(project.vehicle.components.map((component) => component.id));
+    const componentsById = new Map(
+      project.vehicle.components.map((component) => [component.id, component] as const)
+    );
     for (const component of project.vehicle.components) {
       if (component.parentId !== null && !componentIds.has(component.parentId)) {
         context.addIssue({
@@ -254,6 +257,20 @@ export const AerocelProjectSchema = z
           path: ["vehicle", "components"],
           message: `Component ${component.name} references a missing parent`
         });
+      }
+      const visited = new Set<string>([component.id]);
+      let parentId = component.parentId;
+      while (parentId !== null) {
+        if (visited.has(parentId)) {
+          context.addIssue({
+            code: "custom",
+            path: ["vehicle", "components"],
+            message: `Component hierarchy contains a cycle involving ${component.name}`
+          });
+          break;
+        }
+        visited.add(parentId);
+        parentId = componentsById.get(parentId)?.parentId ?? null;
       }
     }
     for (const joint of project.vehicle.joints) {

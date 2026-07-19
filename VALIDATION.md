@@ -15,7 +15,11 @@ The repository covers:
 - quaternion normalization, 6-DOF stepping, trim, transition, and sensors;
 - quality grading, GCI, Monte Carlo repeatability, and stale results;
 - case-path safety, OpenFOAM command shape, PX4 mapping, and remote profiles;
-- optimization/Pareto behavior and report escaping.
+- optimization/Pareto behavior and report escaping;
+- geometry format detection, selected-format mismatch rejection, millimetre-to-
+  metre conversion, STL/OBJ inspection, B-rep capability gates, untrusted glTF
+  resource rejection, component hierarchy cycle rejection, and native source
+  archive path/hash validation.
 
 Run the full matrix with the commands in [README.md](README.md). CI repeats the
 TypeScript, Python, and Rust gates on clean runners.
@@ -54,21 +58,25 @@ No result should receive a validated grade solely because a solver completed.
 
 ## Build record — 2026-07-19, macOS 15.7.3 arm64
 
-- `npm run check`: passed; 26 TypeScript tests, strict type checking, lint,
+- `npm run check`: passed; 35 TypeScript tests, strict type checking, lint,
   formatting, and every workspace build passed.
 - Python 3.9: compilation and 3 unit tests passed; strict mypy and Ruff passed.
 - Scientific orchestrator: real loopback `/health` smoke test passed and correctly
   reported OpenFOAM, VSPAERO, and JSBSim unavailable rather than returning jobs.
-- Rust 1.92: 2 native tests, Cargo check, and clippy with warnings denied passed.
+- Rust 1.92: 3 native tests, Cargo format/check, and clippy with warnings denied
+  passed.
 - Native runtime: release application stayed healthy during a three-second launch
   smoke test.
 - Packaging: arm64 `.app` and `.dmg` built; `hdiutil verify` reported a valid disk
   image. The local artifact is intentionally not Developer ID signed or notarized,
   because no organization signing credentials were provided.
-- UI: first-run, Geometry, Rapid Aero, CFD unavailable state, motor-out failure,
-  and 1040 × 700 responsive layout were exercised in the in-app browser. No
-  application errors were observed; an upstream React Three Fiber use of the
-  deprecated Three.js `Clock` API remained a non-failing development warning.
-- Build note: Vite reports a 1.34 MB initial JavaScript chunk (368 kB gzip), driven
-  primarily by the native 3D stack. This is recorded as a lazy-loading performance
-  task; it does not affect the local bundle's integrity.
+- UI: first-run, Geometry, explicit format/unit/type import setup, drag/drop target,
+  editable transforms, Settings, remote-host profile form, Rapid Aero, CFD
+  unavailable state, motor-out failure, and 1040 × 700 responsive layout were
+  exercised in the in-app browser. The browser control surface cannot attach a
+  real local file; file parsing and commit preconditions are covered by unit tests
+  and the native archive layer by Rust tests.
+- Build note: Vite reports a 1.38 MB initial JavaScript chunk (378 kB gzip), driven
+  primarily by the native 3D stack. Format loaders are split into separate dynamic
+  chunks. Further 3D workspace lazy loading remains a measured performance task;
+  it does not affect the local bundle's integrity.
