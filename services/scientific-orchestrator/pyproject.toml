@@ -28,5 +28,14 @@ python_version = "3.9"
 strict = true
 plugins = ["pydantic.mypy"]
 
+[[tool.mypy.overrides]]
+# CI resolves the newest AnyIO supported by its Python runtime. Do not type-check
+# dependency internals against this project's lower Python 3.9 target.
+module = ["anyio.*"]
+follow_imports = "skip"
+
+[tool.setuptools.packages.find]
+include = ["aerocel_service*"]
+
 [tool.uvicorn]
 factory = false
