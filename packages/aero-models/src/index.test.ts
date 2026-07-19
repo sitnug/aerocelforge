@@ -7,12 +7,11 @@ describe("ISA atmosphere", () => {
   });
 });
 
-describe("A1 component buildup", () => {
+describe("A1 parabolic polar", () => {
   const baseline = {
     wingAreaM2: 0.82,
     wingSpanM: 2.4,
     meanChordM: 0.36,
-    massKg: 8.42,
     airspeedMS: 22,
     angleOfAttackRad: (4 * Math.PI) / 180,
     sideslipRad: 0,
@@ -38,6 +37,39 @@ describe("A1 component buildup", () => {
     expect(high.inducedDragCoefficient).toBeGreaterThan(low.inducedDragCoefficient);
   });
 
+  it("accounts for each configured drag contribution without hiding it", () => {
+    const result = analyzeComponentBuildup({
+      ...baseline,
+      sideslipRad: (5 * Math.PI) / 180,
+      sideslipDragFactorPerRad2: 0.2,
+      additionalDragCoefficient: 0.004
+    });
+    expect(result.dragBreakdown.zeroLift).toBe(0.034);
+    expect(result.dragBreakdown.sideslip).toBeCloseTo(0.2 * ((5 * Math.PI) / 180) ** 2, 12);
+    expect(result.dragBreakdown.additional).toBe(0.004);
+    expect(result.dragBreakdown.total).toBeCloseTo(
+      result.dragBreakdown.zeroLift +
+        result.dragBreakdown.induced +
+        result.dragBreakdown.sideslip +
+        result.dragBreakdown.additional,
+      12
+    );
+    expect(result.coefficients.cd).toBe(result.dragBreakdown.total);
+  });
+
+  it("uses the nearest positive or negative attached-flow boundary for stall margin", () => {
+    const positive = analyzeComponentBuildup({
+      ...baseline,
+      angleOfAttackRad: (12 * Math.PI) / 180
+    });
+    const negative = analyzeComponentBuildup({
+      ...baseline,
+      angleOfAttackRad: (-12 * Math.PI) / 180
+    });
+    expect((positive.stallMarginRad * 180) / Math.PI).toBeCloseTo(1, 12);
+    expect((negative.stallMarginRad * 180) / Math.PI).toBeCloseTo(1, 12);
+  });
+
   it("reports a finite-wing slope below the 2D section slope", () => {
     expect(analyzeComponentBuildup(baseline).finiteWingLiftSlopePerRad).toBeLessThan(2 * Math.PI);
   });
@@ -55,5 +87,23 @@ describe("glide envelope", () => {
     });
     expect(result.bestGlide.airspeedMS).toBeGreaterThan(result.stallSpeedMS);
     expect(result.minimumSink.sinkRateMS).toBeGreaterThan(0);
+    expect(result.bestGlide.sinkRateMS).toBeCloseTo(
+      result.bestGlide.airspeedMS * Math.sin(result.bestGlide.glideAngleRad),
+      12
+    );
+    expect(result.bestGlide.liftToDrag).toBeCloseTo(1 / (2 * Math.sqrt(0.034 * 0.055)), 2);
+  });
+
+  it("rejects nonphysical drag-polar inputs", () => {
+    expect(() =>
+      calculateGlideEnvelope({
+        massKg: 8.42,
+        wingAreaM2: 0.82,
+        densityKgM3: 1.225,
+        maximumLiftCoefficient: 1.35,
+        zeroLiftDragCoefficient: -0.01,
+        inducedDragFactor: 0.055
+      })
+    ).toThrow("physically positive");
   });
 });

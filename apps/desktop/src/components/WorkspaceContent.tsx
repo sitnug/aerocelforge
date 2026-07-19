@@ -1221,7 +1221,7 @@ function AeroWorkspace(props: WorkspaceContentProps) {
       <WorkspaceHeader
         eyebrow="RAPID AERODYNAMICS"
         title="Attached-flow design point"
-        description="Component buildup with finite-wing lift slope and an explicit validity envelope."
+        description="Finite-wing lift slope with transparent parabolic drag accounting and an explicit validity envelope."
         actions={
           <>
             <Badge tone="warning">A1 · PRELIMINARY</Badge>
@@ -1258,10 +1258,28 @@ function AeroWorkspace(props: WorkspaceContentProps) {
             props.setAnalysisOptions((current) => ({ ...current, angleOfAttackDeg: value }))
           }
         />
+        <SliderField
+          label="Added real-world drag"
+          value={props.analysisOptions.additionalDragCounts}
+          minimum={0}
+          maximum={100}
+          step={5}
+          unit="counts"
+          onChange={(value) =>
+            props.setAnalysisOptions((current) => ({
+              ...current,
+              additionalDragCounts: value
+            }))
+          }
+        />
         <div className="control-readout">
           <small>ATMOSPHERE</small>
           <strong>{props.analysis.atmosphere.densityKgM3.toFixed(3)} kg/m³</strong>
           <span>ISA · {props.project.environment.altitudeM} m</span>
+          <span>
+            Re {props.analysis.designPoint.reynoldsNumber.toExponential(2)} · M{" "}
+            {props.analysis.designPoint.machNumber.toFixed(3)}
+          </span>
         </div>
       </div>
       <div className="metric-grid metric-grid--four">
@@ -1295,6 +1313,48 @@ function AeroWorkspace(props: WorkspaceContentProps) {
           tone={props.analysis.designPoint.stallMarginRad < 0 ? "danger" : "warning"}
         />
       </div>
+      <section className="section-card aero-drag-ledger">
+        <div className="section-card__header">
+          <span>
+            <small>DRAG ACCOUNTING</small>
+            <h2>What the A1 total contains</h2>
+          </span>
+          <Badge tone="warning">Aggregate input + induced</Badge>
+        </div>
+        <div className="detail-grid aero-drag-grid">
+          <span>
+            <small>ZERO-LIFT AGGREGATE</small>
+            <strong>{props.analysis.designPoint.dragBreakdown.zeroLift.toFixed(5)}</strong>
+          </span>
+          <span>
+            <small>INDUCED</small>
+            <strong>{props.analysis.designPoint.dragBreakdown.induced.toFixed(5)}</strong>
+          </span>
+          <span>
+            <small>SIDESLIP INCREMENT</small>
+            <strong>{props.analysis.designPoint.dragBreakdown.sideslip.toFixed(5)}</strong>
+          </span>
+          <span>
+            <small>USER-ADDED</small>
+            <strong>{props.analysis.designPoint.dragBreakdown.additional.toFixed(5)}</strong>
+          </span>
+          <span>
+            <small>TOTAL CD</small>
+            <strong>{props.analysis.designPoint.dragBreakdown.total.toFixed(5)}</strong>
+          </span>
+        </div>
+        <p className="card-copy">
+          Zero-lift CD is an illustrative aggregate input. It does not independently resolve
+          wetted-area skin friction, form/interference, cooling, landing-gear, trim, surface
+          roughness, or wave drag. Add measured or justified drag counts above; use a calibrated
+          parasite-drag or CFD workflow for geometry-derived values.
+        </p>
+      </section>
+      {props.analysis.designPoint.warnings.length > 0 && (
+        <Notice tone="warning" title="Current-point model warnings">
+          {props.analysis.designPoint.warnings.join(" ")}
+        </Notice>
+      )}
       <div className="plot-grid">
         <EngineeringPlot
           title="Lift curve"
@@ -1307,7 +1367,7 @@ function AeroWorkspace(props: WorkspaceContentProps) {
         />
         <EngineeringPlot
           title="Drag polar"
-          subtitle="Zero-lift plus induced drag; interference effects are user assumptions"
+          subtitle="Aggregate zero-lift, induced, and explicit added drag; terms are listed above"
           xLabel="CD (—)"
           yLabel="CL (—)"
           data={props.analysis.polar.map((point) => ({ x: point.cd, y: point.cl }))}
@@ -2317,7 +2377,7 @@ function ResultsWorkspace(props: WorkspaceContentProps) {
       "CL at design point",
       props.analysis.designPoint.coefficients.cl.toFixed(3),
       "estimated",
-      "A1 component buildup",
+      "A1 parabolic polar",
       "Preliminary"
     ],
     [
@@ -2631,7 +2691,7 @@ function ReportsWorkspace(props: WorkspaceContentProps) {
               name: "Design-point CL",
               value: props.analysis.designPoint.coefficients.cl.toFixed(3),
               provenance: "Estimated",
-              fidelity: "A1 component buildup",
+              fidelity: "A1 parabolic polar",
               quality: "Preliminary",
               uncertainty: "Not quantified",
               warning: props.analysis.designPoint.warnings.join(" ")

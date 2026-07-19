@@ -46,11 +46,19 @@ Propulsion exposes P0/P1/P2/P3 fidelity explicitly. The built-in Kestrel view us
 P2 BEMT with motor losses and battery voltage sag. Inspect convergence and model
 warnings before trusting thrust, torque, or endurance. P3 requires real CFD.
 
-Rapid Aero runs the built-in A1 analytical/component buildup across an angle-of-
+Rapid Aero runs the built-in A1 attached-flow parabolic polar across an angle-of-
 attack sweep. Lift, drag, pitching moment, span loading, stability estimates, and
 glide envelope are derived from the current example inputs and can be exported as
 CSV. A1 is useful for concept trades, not separated-flow or propeller/airframe
 interaction validation.
+
+The drag ledger separates aggregate zero-lift drag, induced drag, configured
+sideslip drag, and explicit user-added drag. Use **Added real-world drag** in drag
+counts only when supported by measurement or a documented engineering method.
+Imported shape does not automatically determine skin-friction, form,
+interference, trim, cooling, or wave drag. See
+[AERODYNAMICS_MODEL.md](AERODYNAMICS_MODEL.md) for equations and the required
+calibration workflow.
 
 ## Flight and transition
 

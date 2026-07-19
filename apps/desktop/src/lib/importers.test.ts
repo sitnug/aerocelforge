@@ -1,11 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { acceptForGeometryFormat, detectGeometryFormat, inspectGeometryFile } from "./importers";
+import {
+  acceptForGeometryFormat,
+  detectGeometryFormat,
+  inspectGeometryFile,
+  requireSingleGeometryFile
+} from "./importers";
 
 describe("geometry format registry", () => {
   it("detects grouped extensions and narrows file picker acceptance", () => {
     expect(detectGeometryFormat("wing.STP")?.id).toBe("step");
     expect(detectGeometryFormat("vehicle.glb")?.id).toBe("gltf");
     expect(acceptForGeometryFormat("iges")).toBe(".iges,.igs");
+  });
+
+  it("accepts exactly one dropped file and rejects ambiguous drops", () => {
+    const file = new File(["solid empty"], "body.stl");
+    expect(requireSingleGeometryFile([file])).toBe(file);
+    expect(() => requireSingleGeometryFile([])).toThrow("exactly one");
+    expect(() => requireSingleGeometryFile([file, file])).toThrow("exactly one");
   });
 });
 

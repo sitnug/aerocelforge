@@ -12,7 +12,7 @@
     "dev": "npm run dev --workspace @aerocel/desktop",
     "desktop": "npm run tauri --workspace @aerocel/desktop -- dev",
     "build": "npm run build --workspaces --if-present",
-    "desktop:build": "npm run tauri --workspace @aerocel/desktop -- build",
+    "desktop:build": "npm run tauri --workspace @aerocel/desktop -- build && node scripts/finalize-macos-bundle.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "eslint . --max-warnings 0",

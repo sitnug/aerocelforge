@@ -78,7 +78,6 @@ export interface AnalyticalAeroInput {
   readonly wingAreaM2: number;
   readonly wingSpanM: number;
   readonly meanChordM: number;
-  readonly massKg: number;
   readonly airspeedMS: number;
   readonly angleOfAttackRad: number;
   readonly sideslipRad: number;
@@ -92,6 +91,18 @@ export interface AnalyticalAeroInput {
   readonly sideForceSlopePerRad: number;
   readonly stallAnglePositiveRad: number;
   readonly maximumLiftCoefficient: number;
+  readonly stallAngleNegativeRad?: number;
+  readonly minimumLiftCoefficient?: number;
+  readonly additionalDragCoefficient?: number;
+  readonly sideslipDragFactorPerRad2?: number;
+}
+
+export interface DragCoefficientBreakdown {
+  readonly zeroLift: number;
+  readonly induced: number;
+  readonly sideslip: number;
+  readonly additional: number;
+  readonly total: number;
 }
 
 export interface AnalyticalAeroResult {
@@ -110,8 +121,9 @@ export interface AnalyticalAeroResult {
   readonly machNumber: number;
   readonly finiteWingLiftSlopePerRad: number;
   readonly inducedDragCoefficient: number;
+  readonly dragBreakdown: DragCoefficientBreakdown;
   readonly stallMarginRad: number;
-  readonly fidelity: "A1_component_buildup";
+  readonly fidelity: "A1_parabolic_polar";
   readonly provenance: "estimated";
   readonly quality: "preliminary";
   readonly validity: readonly string[];
@@ -119,14 +131,27 @@ export interface AnalyticalAeroResult {
 }
 
 export function analyzeComponentBuildup(input: AnalyticalAeroInput): AnalyticalAeroResult {
+  const additionalDragCoefficient = input.additionalDragCoefficient ?? 0;
+  const sideslipDragFactorPerRad2 = input.sideslipDragFactorPerRad2 ?? 0;
+  const minimumLiftCoefficient = input.minimumLiftCoefficient ?? -input.maximumLiftCoefficient;
+  const stallAngleNegativeRad = input.stallAngleNegativeRad ?? -input.stallAnglePositiveRad;
   if (
+    !Object.values(input).every((value) => value === undefined || Number.isFinite(value)) ||
     input.wingAreaM2 <= 0 ||
     input.wingSpanM <= 0 ||
     input.meanChordM <= 0 ||
-    input.massKg <= 0 ||
     input.airspeedMS < 0 ||
+    input.sectionLiftSlopePerRad <= 0 ||
     input.oswaldEfficiency <= 0 ||
-    input.oswaldEfficiency > 1.2
+    input.oswaldEfficiency > 1.2 ||
+    input.zeroLiftDragCoefficient < 0 ||
+    additionalDragCoefficient < 0 ||
+    sideslipDragFactorPerRad2 < 0 ||
+    input.maximumLiftCoefficient <= 0 ||
+    minimumLiftCoefficient >= 0 ||
+    input.stallAnglePositiveRad <= 0 ||
+    stallAngleNegativeRad >= 0 ||
+    stallAngleNegativeRad >= input.stallAnglePositiveRad
   ) {
     throw new Error("A1 aerodynamic inputs are outside physical input bounds");
   }
@@ -136,12 +161,14 @@ export function analyzeComponentBuildup(input: AnalyticalAeroInput): AnalyticalA
     input.sectionLiftSlopePerRad /
     (1 + input.sectionLiftSlopePerRad / (Math.PI * input.oswaldEfficiency * aspectRatio));
   const linearCl = finiteWingLiftSlopePerRad * (input.angleOfAttackRad - input.zeroLiftAngleRad);
-  const cl = Math.max(
-    -input.maximumLiftCoefficient,
-    Math.min(input.maximumLiftCoefficient, linearCl)
-  );
+  const cl = Math.max(minimumLiftCoefficient, Math.min(input.maximumLiftCoefficient, linearCl));
   const inducedDragCoefficient = cl ** 2 / (Math.PI * input.oswaldEfficiency * aspectRatio);
-  const cd = input.zeroLiftDragCoefficient + inducedDragCoefficient;
+  const sideslipDragCoefficient = sideslipDragFactorPerRad2 * input.sideslipRad ** 2;
+  const cd =
+    input.zeroLiftDragCoefficient +
+    inducedDragCoefficient +
+    sideslipDragCoefficient +
+    additionalDragCoefficient;
   const cy = input.sideslipRad === 0 ? 0 : input.sideForceSlopePerRad * input.sideslipRad;
   const cm = input.pitchingMomentZero + input.pitchingMomentSlopePerRad * input.angleOfAttackRad;
   const dynamicPressurePa = 0.5 * atmosphere.densityKgM3 * input.airspeedMS ** 2;
@@ -149,16 +176,41 @@ export function analyzeComponentBuildup(input: AnalyticalAeroInput): AnalyticalA
   const drag = dynamicPressurePa * input.wingAreaM2 * cd;
   const side = dynamicPressurePa * input.wingAreaM2 * cy;
   const warnings: string[] = [];
-  if (Math.abs(input.angleOfAttackRad) > input.stallAnglePositiveRad) {
+  const reynoldsNumber =
+    (atmosphere.densityKgM3 * input.airspeedMS * input.meanChordM) / atmosphere.dynamicViscosityPaS;
+  const machNumber = input.airspeedMS / atmosphere.speedOfSoundMS;
+  if (
+    input.angleOfAttackRad > input.stallAnglePositiveRad ||
+    input.angleOfAttackRad < stallAngleNegativeRad
+  ) {
     warnings.push(
-      "Angle of attack exceeds the attached-flow validity limit; CL is clipped, not post-stall modeled"
+      "Angle of attack exceeds an attached-flow stall boundary; CL is clipped, not post-stall modeled"
     );
   }
   if (Math.abs(input.sideslipRad) > (15 * Math.PI) / 180) {
-    warnings.push("Sideslip exceeds the preliminary component-buildup validity range");
+    warnings.push("Sideslip exceeds the preliminary parabolic-polar validity range");
   }
   if (input.airspeedMS <= 0)
     warnings.push("Zero airspeed: aerodynamic coefficients are defined but forces are zero");
+  if (input.sideslipRad !== 0 && sideslipDragFactorPerRad2 === 0) {
+    warnings.push(
+      "Sideslip drag is not configured; only the side-force estimate changes with beta"
+    );
+  }
+  if (additionalDragCoefficient === 0) {
+    warnings.push(
+      "No explicit excrescence, cooling, landing-gear, or trim-drag increment is configured"
+    );
+  }
+  if (machNumber >= 0.3) {
+    warnings.push("Compressibility and wave-drag rise are not modeled by this A1 polar");
+  }
+  if (reynoldsNumber > 0 && reynoldsNumber < 100_000) {
+    warnings.push("Reynolds number is below 100,000; viscous and separation sensitivity is high");
+  }
+  if (input.oswaldEfficiency > 1) {
+    warnings.push("Span efficiency above 1.0 requires evidence for the selected convention");
+  }
   return {
     coefficients: { cl, cd, cy, roll: 0, cm, cn: 0 },
     forcesN: { lift, drag, side },
@@ -168,21 +220,30 @@ export function analyzeComponentBuildup(input: AnalyticalAeroInput): AnalyticalA
       yaw: 0
     },
     dynamicPressurePa,
-    reynoldsNumber:
-      (atmosphere.densityKgM3 * input.airspeedMS * input.meanChordM) /
-      atmosphere.dynamicViscosityPaS,
-    machNumber: input.airspeedMS / atmosphere.speedOfSoundMS,
+    reynoldsNumber,
+    machNumber,
     finiteWingLiftSlopePerRad,
     inducedDragCoefficient,
-    stallMarginRad: input.stallAnglePositiveRad - input.angleOfAttackRad,
-    fidelity: "A1_component_buildup",
+    dragBreakdown: {
+      zeroLift: input.zeroLiftDragCoefficient,
+      induced: inducedDragCoefficient,
+      sideslip: sideslipDragCoefficient,
+      additional: additionalDragCoefficient,
+      total: cd
+    },
+    stallMarginRad: Math.min(
+      input.stallAnglePositiveRad - input.angleOfAttackRad,
+      input.angleOfAttackRad - stallAngleNegativeRad
+    ),
+    fidelity: "A1_parabolic_polar",
     provenance: "estimated",
     quality: "preliminary",
     validity: [
       "Attached subsonic flow",
       "Moderate angle of attack and sideslip",
       "No strong rotor-airframe interaction",
-      "Rigid geometry"
+      "Rigid geometry",
+      "Zero-lift drag is an aggregate input, not geometry-derived skin-friction buildup"
     ],
     warnings
   };
@@ -222,6 +283,7 @@ export interface GlidePoint {
   readonly liftCoefficient: number;
   readonly dragCoefficient: number;
   readonly liftToDrag: number;
+  readonly glideAngleRad: number;
   readonly sinkRateMS: number;
   readonly powerRequiredW: number;
 }
@@ -245,6 +307,17 @@ export function calculateGlideEnvelope(input: {
   readonly maximumSpeedMS?: number;
   readonly samples?: number;
 }): GlideEnvelope {
+  if (
+    !Object.values(input).every((value) => value === undefined || Number.isFinite(value)) ||
+    input.massKg <= 0 ||
+    input.wingAreaM2 <= 0 ||
+    input.densityKgM3 <= 0 ||
+    input.maximumLiftCoefficient <= 0 ||
+    input.zeroLiftDragCoefficient <= 0 ||
+    input.inducedDragFactor <= 0
+  ) {
+    throw new Error("Glide-envelope inputs must be finite and physically positive");
+  }
   const weightN = input.massKg * STANDARD_GRAVITY_M_S2;
   const stallSpeedMS = Math.sqrt(
     (2 * weightN) / (input.densityKgM3 * input.wingAreaM2 * input.maximumLiftCoefficient)
@@ -261,6 +334,7 @@ export function calculateGlideEnvelope(input: {
     const dragCoefficient =
       input.zeroLiftDragCoefficient + input.inducedDragFactor * liftCoefficient ** 2;
     const liftToDrag = liftCoefficient / dragCoefficient;
+    const glideAngleRad = Math.atan2(dragCoefficient, liftCoefficient);
     const dragN = dynamicPressure * input.wingAreaM2 * dragCoefficient;
     const powerRequiredW = dragN * airspeedMS;
     return {
@@ -268,7 +342,8 @@ export function calculateGlideEnvelope(input: {
       liftCoefficient,
       dragCoefficient,
       liftToDrag,
-      sinkRateMS: airspeedMS / liftToDrag,
+      glideAngleRad,
+      sinkRateMS: airspeedMS * Math.sin(glideAngleRad),
       powerRequiredW
     };
   });

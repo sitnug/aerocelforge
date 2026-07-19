@@ -30,6 +30,7 @@ import {
   GEOMETRY_FORMATS,
   inspectGeometryFile,
   MAX_LOCAL_FILE_BYTES,
+  requireSingleGeometryFile,
   type GeometryImportFormat,
   type GeometryUnit,
   type ImportedGeometryInspection
@@ -154,13 +155,11 @@ export function GeometryImportDialog({
   const onDrop = (event: DragEvent<HTMLDivElement>): void => {
     event.preventDefault();
     setDragActive(false);
-    const files = [...event.dataTransfer.files];
-    if (files.length !== 1) {
-      setError("Drop exactly one source file. Import separate components one at a time.");
-      return;
+    try {
+      chooseFile(requireSingleGeometryFile([...event.dataTransfer.files]));
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : String(reason));
     }
-    const file = files[0];
-    if (file !== undefined) chooseFile(file);
   };
 
   const canCommit =
@@ -392,11 +391,16 @@ export function GeometryImportDialog({
           <main className="import-stage">
             <div
               className={`import-dropzone ${dragActive ? "import-dropzone--active" : ""} ${selectedFile !== null ? "import-dropzone--selected" : ""}`}
+              role="group"
+              aria-label="Geometry file drop zone"
               onDragEnter={(event) => {
                 event.preventDefault();
                 setDragActive(true);
               }}
-              onDragOver={(event) => event.preventDefault()}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "copy";
+              }}
               onDragLeave={(event) => {
                 if (event.currentTarget === event.target) setDragActive(false);
               }}

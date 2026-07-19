@@ -9,7 +9,29 @@ describe("Kestrel integrated engineering analysis", () => {
     expect(result.propeller.converged).toBe(true);
     expect(result.polar).toHaveLength(23);
     expect(result.optimization).toHaveLength(42);
-    expect(result.designPoint.fidelity).toBe("A1_component_buildup");
+    expect(result.designPoint.fidelity).toBe("A1_parabolic_polar");
     expect(result.transition.quality).toBe("preliminary");
+  });
+
+  it("propagates explicit drag counts through design point, glide, trim, and transition", () => {
+    const baseline = runRapidAnalysis(kestrelProject, defaultAnalysisOptions);
+    const withIncrement = runRapidAnalysis(kestrelProject, {
+      ...defaultAnalysisOptions,
+      additionalDragCounts: 40
+    });
+    expect(withIncrement.designPoint.dragBreakdown.additional).toBeCloseTo(0.004, 12);
+    expect(
+      withIncrement.designPoint.coefficients.cd - baseline.designPoint.coefficients.cd
+    ).toBeCloseTo(0.004, 12);
+    expect(withIncrement.trim.dragCoefficient - baseline.trim.dragCoefficient).toBeCloseTo(
+      0.004,
+      12
+    );
+    expect(withIncrement.glide.bestGlide.liftToDrag).toBeLessThan(
+      baseline.glide.bestGlide.liftToDrag
+    );
+    expect(withIncrement.transition.points[2]?.dragN).toBeGreaterThan(
+      baseline.transition.points[2]?.dragN ?? Number.POSITIVE_INFINITY
+    );
   });
 });

@@ -42,6 +42,25 @@ function inverseMatrix3(matrix: Matrix3): Matrix3 {
   ];
 }
 
+function validateInertiaTensor(matrix: Matrix3): void {
+  if (!matrix.every(Number.isFinite)) throw new Error("Inertia tensor must contain finite values");
+  const tolerance = 1e-10;
+  if (
+    Math.abs(matrix[1] - matrix[3]) > tolerance ||
+    Math.abs(matrix[2] - matrix[6]) > tolerance ||
+    Math.abs(matrix[5] - matrix[7]) > tolerance
+  ) {
+    throw new Error("Inertia tensor must be symmetric");
+  }
+  const firstMinor = matrix[0];
+  const secondMinor = matrix[0] * matrix[4] - matrix[1] ** 2;
+  const [a, b, c, d, e, f, g, h, i] = matrix;
+  const determinant = a * (e * i - f * h) - b * (d * i - f * g) + c * (d * h - e * g);
+  if (firstMinor <= 0 || secondMinor <= 0 || determinant <= 0) {
+    throw new Error("Inertia tensor must be positive definite");
+  }
+}
+
 export function normalizeQuaternion(quaternion: Quaternion): Quaternion {
   const magnitude = Math.sqrt(quaternion.reduce((sum, value) => sum + value ** 2, 0));
   if (magnitude <= Number.EPSILON) throw new Error("Attitude quaternion cannot be zero");
@@ -93,7 +112,15 @@ function arrayToState(values: readonly number[], timeS: number): SixDofState {
 }
 
 export function rigidBodyDerivative(state: SixDofState, input: RigidBodyInput): readonly number[] {
-  if (input.massKg <= 0) throw new Error("Rigid-body mass must be positive");
+  if (
+    !Number.isFinite(input.massKg) ||
+    input.massKg <= 0 ||
+    !input.forceBodyN.every(Number.isFinite) ||
+    !input.momentBodyNm.every(Number.isFinite)
+  ) {
+    throw new Error("Rigid-body mass, forces, and moments must be finite and physically valid");
+  }
+  validateInertiaTensor(input.inertiaBodyKgM2);
   const gravityBody = nedToBody([0, 0, STANDARD_GRAVITY_M_S2], state.attitudeBodyToNed);
   const accelerationBody = subtract3(
     add3(scale3(input.forceBodyN, 1 / input.massKg), gravityBody),
@@ -149,8 +176,19 @@ export interface TrimResult {
 
 export function solveStraightLevelTrim(input: TrimInput): TrimResult {
   const dynamicPressure = 0.5 * input.densityKgM3 * input.airspeedMS ** 2;
-  if (dynamicPressure <= 0 || input.wingAreaM2 <= 0 || input.liftSlopePerRad <= 0) {
-    throw new Error("Trim requires positive airspeed, density, area, and lift slope");
+  if (
+    !Object.values(input).every(Number.isFinite) ||
+    input.massKg <= 0 ||
+    dynamicPressure <= 0 ||
+    input.wingAreaM2 <= 0 ||
+    input.liftSlopePerRad <= 0 ||
+    input.zeroLiftDragCoefficient < 0 ||
+    input.inducedDragFactor < 0 ||
+    input.maximumLiftCoefficient <= 0
+  ) {
+    throw new Error(
+      "Trim requires finite, physically valid mass, flow, polar, and geometry inputs"
+    );
   }
   const liftCoefficient =
     (input.massKg * STANDARD_GRAVITY_M_S2) / (dynamicPressure * input.wingAreaM2);
@@ -251,28 +289,76 @@ function interpolateSchedule(
 }
 
 export function simulateTransition(input: TransitionInput): TransitionResult {
+  const scalarInputs = [
+    input.massKg,
+    input.wingAreaM2,
+    input.densityKgM3,
+    input.maximumTotalThrustN,
+    input.maximumPowerW,
+    input.initialAltitudeM,
+    input.initialAirspeedMS,
+    input.durationS,
+    input.stepS,
+    input.tiltRateLimitRadS,
+    input.liftSlopePerRad,
+    input.assumedAngleOfAttackRad,
+    input.maximumLiftCoefficient,
+    input.zeroLiftDragCoefficient,
+    input.inducedDragFactor,
+    input.failedMotorFraction,
+    input.jammedTiltRad
+  ].filter((value): value is number => value !== undefined);
+  const orderedSchedule = [...input.schedule].sort((left, right) => left.timeS - right.timeS);
   if (
+    !scalarInputs.every(Number.isFinite) ||
     input.massKg <= 0 ||
+    input.wingAreaM2 <= 0 ||
+    input.densityKgM3 <= 0 ||
     input.stepS <= 0 ||
     input.durationS <= 0 ||
-    input.maximumTotalThrustN < 0
+    input.maximumTotalThrustN < 0 ||
+    input.maximumPowerW < 0 ||
+    input.initialAirspeedMS < 0 ||
+    input.tiltRateLimitRadS <= 0 ||
+    input.liftSlopePerRad <= 0 ||
+    input.maximumLiftCoefficient <= 0 ||
+    input.zeroLiftDragCoefficient < 0 ||
+    input.inducedDragFactor < 0 ||
+    (input.failedMotorFraction !== undefined &&
+      (input.failedMotorFraction < 0 || input.failedMotorFraction > 1)) ||
+    (input.jammedTiltRad !== undefined &&
+      (input.jammedTiltRad < 0 || input.jammedTiltRad > Math.PI / 2))
   ) {
-    throw new Error("Transition mass, duration, time step, and thrust must be valid");
+    throw new Error("Transition inputs must be finite and physically valid");
+  }
+  if (
+    orderedSchedule.length < 2 ||
+    orderedSchedule.some(
+      (point, index) =>
+        !Object.values(point).every(Number.isFinite) ||
+        point.tiltRad < 0 ||
+        point.tiltRad > Math.PI / 2 ||
+        point.thrustFraction < 0 ||
+        point.thrustFraction > 1 ||
+        (index > 0 && point.timeS <= (orderedSchedule[index - 1]?.timeS ?? point.timeS))
+    ) ||
+    (orderedSchedule[0]?.timeS ?? Infinity) > 0 ||
+    (orderedSchedule.at(-1)?.timeS ?? -Infinity) < input.durationS
+  ) {
+    throw new Error("Transition schedule must be finite, strictly increasing, and cover the run");
   }
   let altitudeM = input.initialAltitudeM;
   let airspeedMS = input.initialAirspeedMS;
   let verticalSpeedMS = 0;
-  let tiltRad = interpolateSchedule(input.schedule, 0).tiltRad;
+  let tiltRad = input.jammedTiltRad ?? interpolateSchedule(orderedSchedule, 0).tiltRad;
   let minimumAltitudeM = altitudeM;
   let peakPowerW = 0;
   const points: TransitionPoint[] = [];
   const motorAvailability = 1 - Math.min(1, Math.max(0, input.failedMotorFraction ?? 0));
 
-  for (let timeS = 0; timeS <= input.durationS + input.stepS / 2; timeS += input.stepS) {
-    const command = interpolateSchedule(input.schedule, timeS);
-    const desiredTilt = input.jammedTiltRad ?? command.tiltRad;
-    const maximumTiltStep = input.tiltRateLimitRadS * input.stepS;
-    tiltRad += Math.max(-maximumTiltStep, Math.min(maximumTiltStep, desiredTilt - tiltRad));
+  let timeS = 0;
+  while (true) {
+    const command = interpolateSchedule(orderedSchedule, timeS);
     const thrustN =
       input.maximumTotalThrustN *
       Math.min(1, Math.max(0, command.thrustFraction)) *
@@ -291,9 +377,6 @@ export function simulateTransition(input: TransitionInput): TransitionResult {
     const horizontalAccelerationMS2 = (forwardThrustN - dragN) / input.massKg;
     const verticalAccelerationMS2 =
       (upwardThrustN + liftN - input.massKg * STANDARD_GRAVITY_M_S2) / input.massKg;
-    airspeedMS = Math.max(0, airspeedMS + horizontalAccelerationMS2 * input.stepS);
-    verticalSpeedMS += verticalAccelerationMS2 * input.stepS;
-    altitudeM += verticalSpeedMS * input.stepS;
     const powerW =
       input.maximumTotalThrustN > 0
         ? input.maximumPowerW * (thrustN / input.maximumTotalThrustN) ** 1.5
@@ -310,8 +393,22 @@ export function simulateTransition(input: TransitionInput): TransitionResult {
       liftN,
       dragN,
       powerW,
-      stallMargin: input.maximumLiftCoefficient - unclippedCl
+      stallMargin: input.maximumLiftCoefficient - Math.abs(unclippedCl)
     });
+
+    if (timeS >= input.durationS) break;
+    const integrationStepS = Math.min(input.stepS, input.durationS - timeS);
+    airspeedMS = Math.max(0, airspeedMS + horizontalAccelerationMS2 * integrationStepS);
+    verticalSpeedMS += verticalAccelerationMS2 * integrationStepS;
+    altitudeM += verticalSpeedMS * integrationStepS;
+    minimumAltitudeM = Math.min(minimumAltitudeM, altitudeM);
+
+    const nextTimeS = timeS + integrationStepS;
+    const nextCommand = interpolateSchedule(orderedSchedule, nextTimeS);
+    const desiredTilt = input.jammedTiltRad ?? nextCommand.tiltRad;
+    const maximumTiltStep = input.tiltRateLimitRadS * integrationStepS;
+    tiltRad += Math.max(-maximumTiltStep, Math.min(maximumTiltStep, desiredTilt - tiltRad));
+    timeS = nextTimeS;
   }
 
   const failures: string[] = [];
@@ -323,8 +420,9 @@ export function simulateTransition(input: TransitionInput): TransitionResult {
   }
   if (input.jammedTiltRad !== undefined)
     failures.push("Tilt mechanism remained at its jammed angle");
-  if (points.some((point) => point.stallMargin < 0))
-    failures.push("The assumed wing angle exceeded the attached-flow CL limit");
+  if (points.some((point) => point.stallMargin < 0)) {
+    failures.push("The assumed wing angle exceeded a positive or negative attached-flow CL limit");
+  }
 
   return {
     points,

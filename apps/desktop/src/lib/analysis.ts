@@ -45,6 +45,7 @@ export interface RapidAnalysis {
 export interface AnalysisOptions {
   readonly airspeedMS: number;
   readonly angleOfAttackDeg: number;
+  readonly additionalDragCounts: number;
   readonly propellerRpm: number;
   readonly failedMotorFraction: number;
   readonly jammedTiltDeg: number | null;
@@ -53,19 +54,21 @@ export interface AnalysisOptions {
 export const defaultAnalysisOptions: AnalysisOptions = {
   airspeedMS: 22,
   angleOfAttackDeg: 4,
+  additionalDragCounts: 0,
   propellerRpm: 6_800,
   failedMotorFraction: 0,
   jammedTiltDeg: null
 };
 
-const inputForAero = (project: AerocelProject, airspeedMS: number, angleOfAttackDeg: number) => ({
+const inputForAero = (
+  project: AerocelProject,
+  airspeedMS: number,
+  angleOfAttackDeg: number,
+  additionalDragCounts: number
+) => ({
   wingAreaM2: project.vehicle.reference.areaM2,
   wingSpanM: project.vehicle.reference.spanM,
   meanChordM: project.vehicle.reference.chordM,
-  massKg: project.vehicle.components.reduce(
-    (sum, component) => sum + (component.mass?.valueKg ?? 0),
-    0
-  ),
   airspeedMS,
   angleOfAttackRad: (angleOfAttackDeg * Math.PI) / 180,
   sideslipRad: 0,
@@ -74,6 +77,7 @@ const inputForAero = (project: AerocelProject, airspeedMS: number, angleOfAttack
   sectionLiftSlopePerRad: 2 * Math.PI,
   oswaldEfficiency: 0.82,
   zeroLiftDragCoefficient: 0.034,
+  additionalDragCoefficient: additionalDragCounts / 10_000,
   pitchingMomentZero: 0.015,
   pitchingMomentSlopePerRad: -0.72,
   sideForceSlopePerRad: -0.8,
@@ -82,6 +86,10 @@ const inputForAero = (project: AerocelProject, airspeedMS: number, angleOfAttack
 });
 
 export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptions): RapidAnalysis {
+  if (options.additionalDragCounts < 0 || !Number.isFinite(options.additionalDragCounts)) {
+    throw new Error("Additional drag counts must be a finite non-negative value");
+  }
+  const aggregateZeroLiftDragCoefficient = 0.034 + options.additionalDragCounts / 10_000;
   const masses = project.vehicle.components.flatMap((component) =>
     component.mass === null
       ? []
@@ -105,10 +113,17 @@ export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptio
     project.environment.temperatureK ?? undefined
   );
   const designPoint = analyzeComponentBuildup(
-    inputForAero(project, options.airspeedMS, options.angleOfAttackDeg)
+    inputForAero(
+      project,
+      options.airspeedMS,
+      options.angleOfAttackDeg,
+      options.additionalDragCounts
+    )
   );
   const polar = Array.from({ length: 23 }, (_, index) => -8 + index).map((alphaDeg) => {
-    const result = analyzeComponentBuildup(inputForAero(project, options.airspeedMS, alphaDeg));
+    const result = analyzeComponentBuildup(
+      inputForAero(project, options.airspeedMS, alphaDeg, options.additionalDragCounts)
+    );
     return {
       alphaDeg,
       cl: result.coefficients.cl,
@@ -123,7 +138,7 @@ export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptio
     wingAreaM2: project.vehicle.reference.areaM2,
     densityKgM3: atmosphere.densityKgM3,
     maximumLiftCoefficient: 1.35,
-    zeroLiftDragCoefficient: 0.034,
+    zeroLiftDragCoefficient: aggregateZeroLiftDragCoefficient,
     inducedDragFactor
   });
   const trim = solveStraightLevelTrim({
@@ -133,7 +148,7 @@ export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptio
     wingAreaM2: project.vehicle.reference.areaM2,
     liftSlopePerRad: designPoint.finiteWingLiftSlopePerRad,
     zeroLiftAngleRad: (-2 * Math.PI) / 180,
-    zeroLiftDragCoefficient: 0.034,
+    zeroLiftDragCoefficient: aggregateZeroLiftDragCoefficient,
     inducedDragFactor,
     maximumLiftCoefficient: 1.35
   });
@@ -217,7 +232,7 @@ export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptio
     liftSlopePerRad: designPoint.finiteWingLiftSlopePerRad,
     assumedAngleOfAttackRad: (6 * Math.PI) / 180,
     maximumLiftCoefficient: 1.35,
-    zeroLiftDragCoefficient: 0.034,
+    zeroLiftDragCoefficient: aggregateZeroLiftDragCoefficient,
     inducedDragFactor,
     failedMotorFraction: options.failedMotorFraction,
     ...(options.jammedTiltDeg === null
@@ -241,8 +256,9 @@ export function runRapidAnalysis(project: AerocelProject, options: AnalysisOptio
       const designMass = mass.massKg - 2.25 + batteryKg + Math.max(0, spanM - 2.4) * 0.7;
       const designAspectRatio = spanM ** 2 / project.vehicle.reference.areaM2;
       const designK = 1 / (Math.PI * 0.82 * designAspectRatio);
-      const optimumCl = Math.sqrt(0.034 / designK);
-      const maximumLiftToDrag = optimumCl / (0.034 + designK * optimumCl ** 2);
+      const optimumCl = Math.sqrt(aggregateZeroLiftDragCoefficient / designK);
+      const maximumLiftToDrag =
+        optimumCl / (aggregateZeroLiftDragCoefficient + designK * optimumCl ** 2);
       const energyWh = batteryKg * 175;
       return {
         parameters,

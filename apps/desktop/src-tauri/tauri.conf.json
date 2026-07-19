@@ -41,6 +41,9 @@
     "category": "DeveloperTool",
     "shortDescription": "Aircraft and UAV engineering environment",
     "longDescription": "A native engineering workspace for geometry, propulsion, aerodynamics, flight dynamics, CFD orchestration, and PX4 workflows.",
-    "macOS": { "minimumSystemVersion": "13.0" }
+    "macOS": {
+      "minimumSystemVersion": "13.0",
+      "signingIdentity": "-"
+    }
   }
 }

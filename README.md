@@ -63,6 +63,8 @@ Start with [MACOS_SETUP.md](MACOS_SETUP.md), then read
 [ARCHITECTURE.md](ARCHITECTURE.md), and validation status is recorded in
 [VALIDATION.md](VALIDATION.md). The implementation-versus-qualification audit is
 in [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md).
+The equations and real-world aerodynamic calibration boundary are documented in
+[docs/AERODYNAMICS_MODEL.md](docs/AERODYNAMICS_MODEL.md).
 
 ## Safety and scope
 

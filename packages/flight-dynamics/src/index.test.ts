@@ -23,6 +23,40 @@ describe("six-degree-of-freedom integration", () => {
     expect(after.velocityBodyMS[2]).toBeCloseTo(9.80665, 5);
     expect(after.positionNedM[2]).toBeCloseTo(4.903325, 5);
   });
+
+  it("rejects nonphysical inertia tensors", () => {
+    const state = {
+      timeS: 0,
+      positionNedM: [0, 0, 0],
+      velocityBodyMS: [0, 0, 0],
+      attitudeBodyToNed: [1, 0, 0, 0],
+      angularRateBodyRadS: [0, 0, 0]
+    } as const;
+    expect(() =>
+      stepSixDof(
+        state,
+        {
+          massKg: 2,
+          inertiaBodyKgM2: [1, 0.2, 0, 0, 1, 0, 0, 0, 1],
+          forceBodyN: [0, 0, 0],
+          momentBodyNm: [0, 0, 0]
+        },
+        0.01
+      )
+    ).toThrow("symmetric");
+    expect(() =>
+      stepSixDof(
+        state,
+        {
+          massKg: 2,
+          inertiaBodyKgM2: [1, 0, 0, 0, 1, 0, 0, 0, -1],
+          forceBodyN: [0, 0, 0],
+          momentBodyNm: [0, 0, 0]
+        },
+        0.01
+      )
+    ).toThrow("positive definite");
+  });
 });
 
 describe("trim", () => {
@@ -55,7 +89,7 @@ describe("VTOL transition", () => {
       initialAltitudeM: 20,
       initialAirspeedMS: 0,
       durationS: 1,
-      stepS: 0.02,
+      stepS: 0.3,
       tiltRateLimitRadS: 2,
       liftSlopePerRad: 4.5,
       assumedAngleOfAttackRad: 0,
@@ -68,5 +102,33 @@ describe("VTOL transition", () => {
       ]
     });
     expect(result.altitudeLossM).toBeCloseTo(0, 8);
+    expect(result.points[0]?.timeS).toBe(0);
+    expect(result.points.at(-1)?.timeS).toBeCloseTo(1, 12);
+  });
+
+  it("rejects schedules that do not cover the simulation", () => {
+    expect(() =>
+      simulateTransition({
+        massKg: 5,
+        wingAreaM2: 0.6,
+        densityKgM3: 1.225,
+        maximumTotalThrustN: 60,
+        maximumPowerW: 1_500,
+        initialAltitudeM: 20,
+        initialAirspeedMS: 0,
+        durationS: 2,
+        stepS: 0.02,
+        tiltRateLimitRadS: 2,
+        liftSlopePerRad: 4.5,
+        assumedAngleOfAttackRad: 0,
+        maximumLiftCoefficient: 1.3,
+        zeroLiftDragCoefficient: 0.04,
+        inducedDragFactor: 0.06,
+        schedule: [
+          { timeS: 0, tiltRad: Math.PI / 2, thrustFraction: 1 },
+          { timeS: 1, tiltRad: 0, thrustFraction: 1 }
+        ]
+      })
+    ).toThrow("cover the run");
   });
 });

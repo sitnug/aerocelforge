@@ -176,6 +176,15 @@ const UNIT_SCALE_M: Readonly<Record<GeometryUnit, number>> = {
 export const MAX_LOCAL_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_LOCAL_TRIANGLES = 1_000_000;
 
+export function requireSingleGeometryFile(files: readonly File[]): File {
+  if (files.length !== 1) {
+    throw new Error("Drop exactly one source file. Import separate components one at a time.");
+  }
+  const file = files[0];
+  if (file === undefined) throw new Error("The drop did not contain a readable local file.");
+  return file;
+}
+
 export function formatDefinition(
   format: Exclude<GeometryImportFormat, "auto">
 ): GeometryFormatDefinition {

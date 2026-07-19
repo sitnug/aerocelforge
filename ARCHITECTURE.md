@@ -51,7 +51,7 @@ boundary. Angles are radians internally and SI is the computational unit system.
 
 Propulsion levels are P0 simple source, P1 manufacturer table, P2 blade-element
 momentum, and P3 CFD actuator disk. Aerodynamics currently implements A1
-analytical/component buildup and explicit external boundaries for higher fidelity.
+attached-flow parabolic polar and explicit external boundaries for higher fidelity.
 A quality grade is independent from fidelity: a high-fidelity run can still fail
 because it diverged, lacks a mesh study, or violates its input domain.
 

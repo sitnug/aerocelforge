@@ -20,6 +20,9 @@ The repository covers:
   metre conversion, STL/OBJ inspection, B-rep capability gates, untrusted glTF
   resource rejection, component hierarchy cycle rejection, and native source
   archive path/hash validation.
+- explicit aerodynamic drag-term summation, added-drag propagation, symmetric
+  stall margins, exact glide-angle sink rate, analytical parabolic-polar best
+  `L/D`, and rejection of nonphysical glide inputs.
 
 Run the full matrix with the commands in [README.md](README.md). CI repeats the
 TypeScript, Python, and Rust gates on clean runners.
@@ -58,7 +61,7 @@ No result should receive a validated grade solely because a solver completed.
 
 ## Build record — 2026-07-19, macOS 15.7.3 arm64
 
-- `npm run check`: passed; 35 TypeScript tests, strict type checking, lint,
+- `npm run check`: passed; 42 TypeScript tests, strict type checking, lint,
   formatting, and every workspace build passed.
 - Python 3.9: compilation and 3 unit tests passed; strict mypy and Ruff passed.
 - Scientific orchestrator: real loopback `/health` smoke test passed and correctly
@@ -67,16 +70,17 @@ No result should receive a validated grade solely because a solver completed.
   passed.
 - Native runtime: release application stayed healthy during a three-second launch
   smoke test.
-- Packaging: arm64 `.app` and `.dmg` built; `hdiutil verify` reported a valid disk
-  image. The local artifact is intentionally not Developer ID signed or notarized,
-  because no organization signing credentials were provided.
+- Packaging: arm64 `.app` and `.dmg` built; strict `codesign` verification and
+  `hdiutil verify` passed. The local artifact has a sealed ad-hoc signature, but is
+  intentionally not Developer ID signed or notarized because no organization
+  signing credentials were provided.
 - UI: first-run, Geometry, explicit format/unit/type import setup, drag/drop target,
   editable transforms, Settings, remote-host profile form, Rapid Aero, CFD
   unavailable state, motor-out failure, and 1040 × 700 responsive layout were
   exercised in the in-app browser. The browser control surface cannot attach a
   real local file; file parsing and commit preconditions are covered by unit tests
   and the native archive layer by Rust tests.
-- Build note: Vite reports a 1.38 MB initial JavaScript chunk (378 kB gzip), driven
+- Build note: Vite reports a 1.38 MB initial JavaScript chunk (380 kB gzip), driven
   primarily by the native 3D stack. Format loaders are split into separate dynamic
   chunks. Further 3D workspace lazy loading remains a measured performance task;
   it does not affect the local bundle's integrity.

@@ -40,7 +40,7 @@ it does not imply certification or parity with a dedicated commercial tool.
 
 ## 4. Rapid aerodynamics
 
-- [x] ISA atmosphere, airfoil DAT parsing, A1 analytical/component buildup,
+- [x] ISA atmosphere, airfoil DAT parsing, transparent A1 parabolic polar,
       induced drag, span loading, stability estimates, and glide envelope.
 - [x] plot and CSV result exploration.
 - [ ] full A2 VLM and A3 panel solvers; adapters remain the intended boundary.
