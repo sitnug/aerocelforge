@@ -80,6 +80,9 @@ interface WorkspaceContentProps {
   readonly setTiltAngle: (jointId: string, angleRad: number) => void;
   readonly onOpenSetup: () => void;
   readonly onNavigate: (workspace: WorkspaceId) => void;
+  readonly geometryImportOpen: boolean;
+  readonly onRequestGeometryImport: () => void;
+  readonly onCloseGeometryImport: () => void;
   readonly geometryAssets: ReadonlyMap<string, TriangleMesh>;
   readonly onGeometryAsset: (sourceSha256: string, mesh: TriangleMesh) => void;
   readonly notify: (message: string) => void;
@@ -224,7 +227,6 @@ function downloadJson(fileName: string, value: unknown): void {
 }
 
 function GeometryWorkspace(props: WorkspaceContentProps) {
-  const [importOpen, setImportOpen] = useState(false);
   const selected = props.selectedComponent;
   const disallowedParentIds = useMemo(() => {
     const blocked = new Set<string>();
@@ -282,7 +284,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             <button
               type="button"
               className="tool-button tool-button--primary"
-              onClick={() => setImportOpen(true)}
+              onClick={props.onRequestGeometryImport}
             >
               <Upload size={15} /> Import model
             </button>
@@ -604,10 +606,10 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
         )}
       </aside>
       <GeometryImportDialog
-        open={importOpen}
+        open={props.geometryImportOpen}
         project={props.project}
         setProject={props.setProject}
-        onClose={() => setImportOpen(false)}
+        onClose={props.onCloseGeometryImport}
         onSelect={props.onSelect}
         onOpenSetup={props.onOpenSetup}
         onGeometryAsset={props.onGeometryAsset}

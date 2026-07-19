@@ -9,6 +9,7 @@ import {
   Command,
   Cpu,
   Fan,
+  FileUp,
   FileText,
   Gauge,
   GitCompareArrows,
@@ -27,7 +28,7 @@ import {
   X,
   type LucideIcon
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { runRapidAnalysis, defaultAnalysisOptions, type AnalysisOptions } from "./lib/analysis";
 import { inspectGeometryFile } from "./lib/importers";
 import { kestrelProject } from "./lib/kestrel";
@@ -394,6 +395,63 @@ function CommandPalette({
   );
 }
 
+function FileMenu({ onImportModel }: { readonly onImportModel: () => void }) {
+  const [open, setOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const importItemRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    importItemRef.current?.focus();
+    const closeOnPointerDown = (event: PointerEvent): void => {
+      if (!containerRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("pointerdown", closeOnPointerDown);
+    window.addEventListener("keydown", closeOnEscape);
+    return () => {
+      window.removeEventListener("pointerdown", closeOnPointerDown);
+      window.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className="titlebar-file" ref={containerRef}>
+      <button
+        type="button"
+        className={`titlebar-file__trigger ${open ? "titlebar-file__trigger--open" : ""}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        File
+      </button>
+      {open && (
+        <div className="file-menu" role="menu" aria-label="File actions">
+          <button
+            ref={importItemRef}
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
+              onImportModel();
+            }}
+          >
+            <FileUp size={15} />
+            <span>
+              <strong>Import model…</strong>
+              <small>Choose or drop a model file</small>
+            </span>
+            <kbd>⌘I</kbd>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SetupWizard({
   open,
   profile,
@@ -553,6 +611,7 @@ export default function App() {
     detail: "Example loaded"
   });
   const [commandOpen, setCommandOpen] = useState(false);
+  const [geometryImportOpen, setGeometryImportOpen] = useState(false);
   const [setupOpen, setSetupOpen] = useState(
     () => localStorage.getItem("aerocel.setup.dismissed") !== "true"
   );
@@ -638,6 +697,11 @@ export default function App() {
         event.preventDefault();
         setCommandOpen((current) => !current);
       }
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "i") {
+        event.preventDefault();
+        setActiveWorkspace("geometry");
+        setGeometryImportOpen(true);
+      }
       if (event.key === "Escape") setCommandOpen(false);
     };
     window.addEventListener("keydown", handler);
@@ -695,6 +759,12 @@ export default function App() {
           <strong>Aerocel Forge</strong>
           <span>0.1.0 engineering workspace</span>
         </div>
+        <FileMenu
+          onImportModel={() => {
+            setActiveWorkspace("geometry");
+            setGeometryImportOpen(true);
+          }}
+        />
         <div className="titlebar-path" data-tauri-drag-region>
           <span>{project.name}</span>
           <ChevronRight size={13} />
@@ -759,6 +829,9 @@ export default function App() {
             setTiltAngle={setTiltAngle}
             onOpenSetup={() => setSetupOpen(true)}
             onNavigate={setActiveWorkspace}
+            geometryImportOpen={geometryImportOpen}
+            onRequestGeometryImport={() => setGeometryImportOpen(true)}
+            onCloseGeometryImport={() => setGeometryImportOpen(false)}
             geometryAssets={geometryAssets}
             onGeometryAsset={(sourceSha256, mesh) =>
               setGeometryAssets((current) => {
