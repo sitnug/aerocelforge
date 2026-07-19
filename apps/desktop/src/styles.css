@@ -88,6 +88,96 @@ body {
   font-size: 13px;
 }
 
+.app-error-screen {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg-0);
+  color: var(--text);
+}
+
+.app-error-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 14px;
+  width: min(520px, 100%);
+  padding: 22px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.app-error-card__icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--danger-muted);
+  color: var(--danger);
+}
+
+.app-error-card small {
+  color: var(--danger);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.app-error-card h1 {
+  margin: 4px 0 7px;
+  font-size: 22px;
+}
+
+.app-error-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.app-error-card > button,
+.app-error-card > details {
+  grid-column: 2;
+}
+
+.app-error-card > button {
+  justify-self: start;
+  margin-top: 4px;
+}
+
+.app-error-card details {
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.app-error-card summary {
+  cursor: pointer;
+}
+
+.app-error-card code {
+  display: block;
+  margin-top: 7px;
+  padding: 9px;
+  overflow-wrap: anywhere;
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--muted);
+}
+
+@media (max-width: 520px) {
+  .app-error-card {
+    grid-template-columns: 1fr;
+  }
+
+  .app-error-card > button,
+  .app-error-card > details {
+    grid-column: 1;
+  }
+}
+
 button,
 input,
 select {

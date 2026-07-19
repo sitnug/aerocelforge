@@ -38,6 +38,19 @@ export function planComponentDeletion(
     );
   }
 
+  const remainingComponents = project.vehicle.components.filter(
+    (component) => !componentIds.has(component.id)
+  );
+  const remainingMassKg = remainingComponents.reduce(
+    (sum, component) => sum + (component.mass?.valueKg ?? 0),
+    0
+  );
+  if (remainingMassKg <= 0) {
+    throw new Error(
+      "This would leave the aircraft with no weight. Give another remaining part a positive weight before deleting this part."
+    );
+  }
+
   const jointIds = project.vehicle.joints
     .filter(
       (joint) =>

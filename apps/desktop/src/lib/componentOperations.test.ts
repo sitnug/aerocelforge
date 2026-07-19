@@ -32,4 +32,28 @@ describe("component deletion", () => {
       "at least one part"
     );
   });
+
+  it("will not delete the only parts that carry weight", () => {
+    const fuselage = kestrelProject.vehicle.components.find(
+      (component) => component.name === "Central fuselage"
+    );
+    const weightlessStandalonePart = {
+      ...kestrelProject.vehicle.components[0],
+      id: "10000000-0000-4000-8000-000000000001",
+      name: "Weightless imported shell",
+      parentId: null,
+      mass: null
+    };
+    const projectWithWeightlessRoot = AerocelProjectSchema.parse({
+      ...kestrelProject,
+      vehicle: {
+        ...kestrelProject.vehicle,
+        components: [...kestrelProject.vehicle.components, weightlessStandalonePart]
+      }
+    });
+
+    expect(() => planComponentDeletion(projectWithWeightlessRoot, fuselage?.id ?? "")).toThrow(
+      "leave the aircraft with no weight"
+    );
+  });
 });

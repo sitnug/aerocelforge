@@ -70,7 +70,7 @@ No result should receive a validated grade solely because a solver completed.
 
 ## Build record — 2026-07-20, macOS 15.7.3 arm64
 
-- `npm run check`: passed; 64 TypeScript tests, strict type checking, lint,
+- `npm run check`: passed; 65 TypeScript tests, strict type checking, lint,
   formatting, and every workspace build passed.
 - Python 3.9: compilation and 3 unit tests passed; strict mypy and Ruff passed.
 - Scientific orchestrator: real loopback `/health` smoke test passed and correctly
