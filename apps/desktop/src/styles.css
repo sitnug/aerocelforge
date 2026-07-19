@@ -227,6 +227,26 @@ button:disabled {
   gap: 8px;
 }
 
+.titlebar-icon-button {
+  display: grid;
+  place-items: center;
+  width: 29px;
+  height: 29px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-subtle);
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.titlebar-icon-button:hover,
+.titlebar-icon-button[aria-pressed="true"] {
+  border-color: var(--line-strong);
+  background: var(--accent-muted);
+  color: var(--accent-strong);
+}
+
 .mode-chip,
 .command-trigger {
   height: 29px;
@@ -3528,6 +3548,17 @@ kbd {
   border-color: color-mix(in srgb, var(--accent) 18%, var(--line));
 }
 
+.flight-stage--fullscreen {
+  position: fixed;
+  z-index: 150;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 43px minmax(0, 1fr);
+  border: 0;
+  border-radius: 0;
+  background: var(--bg-0);
+}
+
 .flight-stage__toolbar {
   display: flex;
   align-items: center;
@@ -3546,6 +3577,61 @@ kbd {
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.08em;
+}
+
+.flight-stage__tools,
+.flight-viewport-size,
+.flight-focus-button {
+  display: flex;
+  align-items: center;
+}
+
+.flight-stage__tools {
+  gap: 8px;
+}
+
+.flight-viewport-size {
+  gap: 7px;
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 650;
+}
+
+.flight-viewport-size input {
+  width: 92px;
+  accent-color: var(--accent);
+}
+
+.flight-viewport-size output {
+  width: 39px;
+  color: var(--text-soft);
+  font:
+    9px ui-monospace,
+    "SFMono-Regular",
+    Menlo,
+    monospace;
+  text-align: right;
+}
+
+.flight-focus-button {
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-1);
+  color: var(--text-soft);
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.flight-focus-button:hover,
+.flight-focus-button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--line));
+  background: var(--accent-muted);
+  color: var(--accent-strong);
 }
 
 .segmented-control,
@@ -3590,7 +3676,13 @@ kbd {
 .flight-stage__viewport {
   position: relative;
   height: 520px;
+  min-height: 360px;
   background: #101714;
+}
+
+.flight-stage--fullscreen .flight-stage__viewport {
+  height: auto !important;
+  min-height: 0;
 }
 
 .flight-hud {
@@ -4074,6 +4166,10 @@ kbd {
     height: 430px;
   }
 
+  .flight-viewport-size > span {
+    display: none;
+  }
+
   .flight-control-grid {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -4135,6 +4231,19 @@ kbd {
 
   .flight-stage__viewport {
     height: 380px;
+  }
+
+  .flight-viewport-size {
+    display: none;
+  }
+
+  .flight-focus-button {
+    width: 34px;
+    padding: 0;
+  }
+
+  .flight-focus-button span {
+    display: none;
   }
 
   .flight-hud--top {

@@ -70,6 +70,11 @@ Space starts or pauses the fixed-step simulation. Live telemetry includes
 attitude, airspeed, altitude, wind-relative aerodynamic state, forces, power,
 position, trail, and battery use.
 
+Use the title-bar fullscreen button for the complete application. Within Flight,
+**View height** adjusts the 3D stage and **Focus** gives the simulator the entire
+application window; press Escape to leave Focus mode. The native window also
+supports normal edge resizing and the macOS green window control.
+
 The behavior editor accepts a bounded mission language with ALTITUDE, AIRSPEED,
 HEADING, WAYPOINT, LAND, and FAILSAFE commands. Unknown or invalid commands
 disable arming; arbitrary code is never executed. See

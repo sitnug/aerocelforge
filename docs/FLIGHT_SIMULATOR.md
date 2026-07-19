@@ -16,6 +16,13 @@ FRD body and NED world frames only at the Three.js boundary.
 4. Fly the two on-screen Mode 2 sticks with pointer or keyboard focus, use a
    standard connected gamepad, or use the global keyboard controls.
 
+Use **View height** to resize the 3D stage from 360 to 800 pixels. The selected
+height is retained locally. **Focus** makes the simulator fill the application
+window and Escape returns to the full engineering workspace. The title-bar
+fullscreen button separately toggles the whole native window or browser view.
+The native macOS window can also be resized normally and has a supported minimum
+size of 1040 by 700 pixels.
+
 The left stick controls yaw and throttle. The right stick controls roll and
 pitch. Releasing a pointer recenters yaw, roll, and pitch while retaining
 throttle, as a Mode 2 transmitter does. Motor tilt is an independent channel.

@@ -81,12 +81,13 @@ No result should receive a validated grade solely because a solver completed.
   editable transforms, Settings, remote-host profile form, Rapid Aero, CFD
   unavailable state, motor-out failure, Flight Lab hover and autonomous program
   execution, invalid behavior rejection, corrected mirrored example geometry,
-  and 1040 × 700 responsive layout were exercised in the in-app browser. The
-  browser control surface cannot attach a real local file or physical gamepad;
-  file parsing and commit preconditions are covered by unit tests and the native
+  application fullscreen, simulator Focus mode, adjustable stage controls, and
+  1040 × 700 responsive layout were exercised in the in-app browser. The browser
+  control surface cannot attach a real local file or physical gamepad; file
+  parsing and commit preconditions are covered by unit tests and the native
   archive layer by Rust tests. A real transmitter/gamepad compatibility matrix
   remains release-qualification evidence.
-- Build note: Vite reports a 1.41 MB initial JavaScript chunk (388 kB gzip), driven
+- Build note: Vite reports a 1.41 MB initial JavaScript chunk (389 kB gzip), driven
   primarily by the native 3D stack. Format loaders are split into separate dynamic
   chunks. Further 3D workspace lazy loading remains a measured performance task;
   it does not affect the local bundle's integrity.

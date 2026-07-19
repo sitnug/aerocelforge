@@ -7,6 +7,8 @@ import {
   CheckCircle2,
   Gamepad2,
   Gauge,
+  Maximize2,
+  Minimize2,
   Pause,
   Play,
   Radio,
@@ -68,6 +70,14 @@ const MODE_LABELS: Readonly<Record<FlightMode, string>> = {
 
 const clamp = (value: number, minimum: number, maximum: number): number =>
   Math.max(minimum, Math.min(maximum, value));
+
+function initialViewportHeight(): number {
+  const saved = Number(localStorage.getItem("aerocel.flight.viewportHeight"));
+  if (Number.isFinite(saved) && saved >= 360 && saved <= 800) return saved;
+  if (window.innerWidth <= 900) return 380;
+  if (window.innerWidth <= 1_200) return 430;
+  return 520;
+}
 
 function initialPilot(model: FlightModel, preset: FlightPreset): PilotInput {
   return {
@@ -252,6 +262,8 @@ export function FlightLab(props: FlightLabProps) {
     compileFlightProgram(localStorage.getItem("aerocel.flight.program") ?? DEFAULT_PROGRAM)
   );
   const [gamepadName, setGamepadName] = useState<string | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(initialViewportHeight);
+  const [focusMode, setFocusMode] = useState(false);
   const [automation, setAutomation] = useState<AutomationSettings>({
     targetAltitudeM: 30,
     targetAirspeedMS: 0,
@@ -405,6 +417,15 @@ export function FlightLab(props: FlightLabProps) {
   }, []);
 
   useEffect(() => {
+    if (!focusMode) return;
+    const exitOnEscape = (event: KeyboardEvent): void => {
+      if (event.key === "Escape") setFocusMode(false);
+    };
+    window.addEventListener("keydown", exitOnEscape);
+    return () => window.removeEventListener("keydown", exitOnEscape);
+  }, [focusMode]);
+
+  useEffect(() => {
     let frameId = 0;
     const poll = (): void => {
       const gamepad = navigator
@@ -480,25 +501,64 @@ export function FlightLab(props: FlightLabProps) {
         </div>
       </header>
 
-      <section className="flight-stage section-card">
+      <section
+        className={`flight-stage section-card ${focusMode ? "flight-stage--fullscreen" : ""}`}
+        aria-label="Interactive flight simulator viewport"
+      >
         <div className="flight-stage__toolbar">
           <span>
             <Radio size={15} /> LIVE · {MODE_LABELS[mode].toUpperCase()}
           </span>
-          <div className="segmented-control" aria-label="Simulation speed">
-            {[1, 2, 4].map((value) => (
-              <button
-                key={value}
-                type="button"
-                className={timeScale === value ? "is-active" : ""}
-                onClick={() => setTimeScale(value)}
-              >
-                {value}×
-              </button>
-            ))}
+          <div className="flight-stage__tools">
+            <label className="flight-viewport-size">
+              <span>View height</span>
+              <input
+                type="range"
+                min={360}
+                max={800}
+                step={20}
+                value={viewportHeight}
+                aria-label="Simulator viewport height"
+                disabled={focusMode}
+                onChange={(event) => {
+                  const nextHeight = Number(event.target.value);
+                  setViewportHeight(nextHeight);
+                  localStorage.setItem("aerocel.flight.viewportHeight", String(nextHeight));
+                }}
+              />
+              <output>{viewportHeight}px</output>
+            </label>
+            <div className="segmented-control" aria-label="Simulation speed">
+              {[1, 2, 4].map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={timeScale === value ? "is-active" : ""}
+                  onClick={() => setTimeScale(value)}
+                >
+                  {value}×
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="flight-focus-button"
+              aria-label={focusMode ? "Exit simulator focus mode" : "Open simulator focus mode"}
+              aria-pressed={focusMode}
+              title={
+                focusMode ? "Exit focus mode (Esc)" : "Fill the application with the simulator"
+              }
+              onClick={() => setFocusMode((current) => !current)}
+            >
+              {focusMode ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+              <span>{focusMode ? "Exit focus" : "Focus"}</span>
+            </button>
           </div>
         </div>
-        <div className="flight-stage__viewport">
+        <div
+          className="flight-stage__viewport"
+          style={focusMode ? undefined : { height: `${viewportHeight}px` }}
+        >
           <AircraftViewport
             project={props.project}
             selectedId={props.selectedId}

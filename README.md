@@ -42,6 +42,10 @@ battery and force telemetry, and a safe waypoint behavior language. See
 [docs/FLIGHT_SIMULATOR.md](docs/FLIGHT_SIMULATOR.md) for controls, commands, and
 the explicit physical-validation boundary.
 
+The application window is resizable and has an explicit fullscreen control in
+the title bar. In the Flight Lab, **View height** resizes the 3D stage and
+**Focus** fills the application with the simulator; Escape exits Focus mode.
+
 ## Verification
 
 ```bash

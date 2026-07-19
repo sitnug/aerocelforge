@@ -16,6 +16,8 @@ import {
   Home,
   Layers3,
   Map as MapIcon,
+  Maximize2,
+  Minimize2,
   PanelLeftClose,
   PlaneTakeoff,
   Save,
@@ -624,6 +626,7 @@ export default function App() {
   const [navigatorOpen, setNavigatorOpen] = useState(true);
   const [recentErrors, setRecentErrors] = useState<readonly string[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [appFullscreen, setAppFullscreen] = useState(false);
 
   const activeDefinition =
     workspaces.find((workspace) => workspace.id === activeWorkspace) ??
@@ -698,6 +701,43 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    if (!isNativeDesktop()) {
+      const syncBrowserFullscreen = (): void => {
+        setAppFullscreen(document.fullscreenElement !== null);
+      };
+      document.addEventListener("fullscreenchange", syncBrowserFullscreen);
+      syncBrowserFullscreen();
+      return () => document.removeEventListener("fullscreenchange", syncBrowserFullscreen);
+    }
+
+    let disposed = false;
+    let removeResizeListener: (() => void) | undefined;
+    void import("@tauri-apps/api/window")
+      .then(async ({ getCurrentWindow }) => {
+        const appWindow = getCurrentWindow();
+        const syncNativeFullscreen = async (): Promise<void> => {
+          const fullscreen = await appWindow.isFullscreen();
+          if (!disposed) setAppFullscreen(fullscreen);
+        };
+        await syncNativeFullscreen();
+        const removeListener = await appWindow.onResized(() => {
+          void syncNativeFullscreen();
+        });
+        if (disposed) removeListener();
+        else removeResizeListener = removeListener;
+      })
+      .catch((error: unknown) => {
+        if (disposed) return;
+        const detail = error instanceof Error ? error.message : String(error);
+        setRecentErrors((current) => [...current, `Fullscreen state: ${detail}`]);
+      });
+    return () => {
+      disposed = true;
+      removeResizeListener?.();
+    };
+  }, []);
+
+  useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -758,6 +798,24 @@ export default function App() {
     }));
   };
 
+  const toggleAppFullscreen = async (): Promise<void> => {
+    try {
+      if (isNativeDesktop()) {
+        const { getCurrentWindow } = await import("@tauri-apps/api/window");
+        const appWindow = getCurrentWindow();
+        const nextFullscreen = !(await appWindow.isFullscreen());
+        await appWindow.setFullscreen(nextFullscreen);
+        setAppFullscreen(nextFullscreen);
+        return;
+      }
+      if (document.fullscreenElement === null) await document.documentElement.requestFullscreen();
+      else await document.exitFullscreen();
+    } catch (error: unknown) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setToast(`Could not change fullscreen mode: ${detail}`);
+    }
+  };
+
   return (
     <div className="app-shell">
       <header className="titlebar" data-tauri-drag-region>
@@ -795,6 +853,18 @@ export default function App() {
                   : "Autosaved"}
             </span>
           </div>
+          <button
+            className="titlebar-icon-button"
+            type="button"
+            aria-label={
+              appFullscreen ? "Exit application fullscreen" : "Enter application fullscreen"
+            }
+            aria-pressed={appFullscreen}
+            title={appFullscreen ? "Exit full screen" : "Full screen"}
+            onClick={() => void toggleAppFullscreen()}
+          >
+            {appFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
           <button className="command-trigger" type="button" onClick={() => setCommandOpen(true)}>
             <Command size={14} />
             <span>Command</span>
