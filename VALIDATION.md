@@ -25,7 +25,12 @@ The repository covers:
   `L/D`, and rejection of nonphysical glide inputs.
 - interactive flight-program parsing and arbitrary-code rejection, fixed-step
   hover repeatability, manual attitude response, altitude/program following,
-  hard-impact ground contact, and mirrored Kestrel wing geometry invariants.
+  hard-impact ground contact, and mirrored Kestrel wing geometry invariants;
+- per-part aerodynamic model derivation, independent surface size/position,
+  triangle-panel scale/normal handling, real aileron-only roll authority, zero
+  invented roll without a matching surface, individual-propeller offset moments,
+  pressure-panel area scaling, custom propeller-key validation, and independent
+  per-part coefficient persistence.
 
 Run the full matrix with the commands in [README.md](README.md). CI repeats the
 TypeScript, Python, and Rust gates on clean runners.
@@ -43,10 +48,11 @@ TypeScript, Python, and Rust gates on clean runners.
 ## Reference project status
 
 Kestrel is an illustrative regression fixture, not measured aircraft data. It
-exercises 13 components, three independent tilt propulsion units, mass/inertia,
-A1 rapid aerodynamics, P2 propulsion, battery voltage sag, slipstream, transition,
-motor-out failure, optimization, and reporting. Inputs are labeled user-entered
-and warnings are retained in exported reports.
+exercises 19 components, including left/right ailerons, an elevator, a rudder,
+two flaps, three independent tilt propulsion units, mass/inertia, A1 rapid
+aerodynamics, per-part interactive air loads, P2 propulsion, battery voltage sag,
+slipstream, transition, motor-out failure, optimization, and reporting. Inputs
+are labeled user-entered and warnings are retained in exported reports.
 
 ## Physical validation still required
 
@@ -62,9 +68,9 @@ Before design or flight decisions, calibrate against traceable measurements:
 
 No result should receive a validated grade solely because a solver completed.
 
-## Build record — 2026-07-19, macOS 15.7.3 arm64
+## Build record — 2026-07-20, macOS 15.7.3 arm64
 
-- `npm run check`: passed; 51 TypeScript tests, strict type checking, lint,
+- `npm run check`: passed; 64 TypeScript tests, strict type checking, lint,
   formatting, and every workspace build passed.
 - Python 3.9: compilation and 3 unit tests passed; strict mypy and Ruff passed.
 - Scientific orchestrator: real loopback `/health` smoke test passed and correctly
@@ -81,8 +87,11 @@ No result should receive a validated grade solely because a solver completed.
   editable transforms, Settings, remote-host profile form, Rapid Aero, CFD
   unavailable state, motor-out failure, Flight Lab hover and autonomous program
   execution, invalid behavior rejection, corrected mirrored example geometry,
-  application fullscreen, simulator Focus mode, adjustable stage controls, and
-  1040 × 700 responsive layout were exercised in the in-app browser. The browser
+  application fullscreen, simulator Focus mode, adjustable stage controls,
+  powered-flight precheck, fitted-surface axis checks, separate propeller power,
+  custom propeller key capture, disabled automatic modes during direct-motor
+  control, and per-part live pressure/lift/drag table were exercised in the
+  in-app browser. The browser
   control surface cannot attach a real local file or physical gamepad; file
   parsing and commit preconditions are covered by unit tests and the native
   archive layer by Rust tests. A real transmitter/gamepad compatibility matrix

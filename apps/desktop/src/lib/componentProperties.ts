@@ -1,4 +1,5 @@
 import type { AerocelProject, VehicleComponent } from "@aerocel/simulation-schema";
+import { displayKeyboardCode, isPropellerBindingAllowed } from "./flightInput";
 
 export type EngineeringPropertyKey =
   | "maximumThrustN"
@@ -18,7 +19,18 @@ export type EngineeringPropertyKey =
   | "rootChordM"
   | "tipChordM"
   | "semiSpanM"
+  | "heightM"
   | "twistTipRad"
+  | "aeroReferenceAreaM2"
+  | "aeroLiftSlopePerRad"
+  | "aeroZeroLiftAngleRad"
+  | "aeroStallAngleRad"
+  | "aeroMaximumLiftCoefficient"
+  | "aeroBaseDragCoefficient"
+  | "aeroInducedDragFactor"
+  | "aeroControlEffectivenessRad"
+  | "aeroPressureCoefficient"
+  | "aeroSkinFrictionCoefficient"
   | "lengthM"
   | "radiusM"
   | "powerW"
@@ -42,8 +54,21 @@ const POSITIVE_KEYS = new Set<EngineeringPropertyKey>([
   "rootChordM",
   "tipChordM",
   "semiSpanM",
+  "heightM",
+  "aeroReferenceAreaM2",
+  "aeroLiftSlopePerRad",
+  "aeroStallAngleRad",
+  "aeroMaximumLiftCoefficient",
   "lengthM",
   "radiusM"
+]);
+
+const NONNEGATIVE_KEYS = new Set<EngineeringPropertyKey>([
+  "aeroBaseDragCoefficient",
+  "aeroInducedDragFactor",
+  "aeroControlEffectivenessRad",
+  "aeroPressureCoefficient",
+  "aeroSkinFrictionCoefficient"
 ]);
 
 function makeMass(
@@ -114,6 +139,7 @@ function updateComponent(
       boundingBoxM[2]
     ];
   }
+  if (key === "heightM") boundingBoxM[2] = value;
   if (key === "lengthM") boundingBoxM[0] = value;
   if (key === "radiusM") {
     boundingBoxM[1] = value * 2;
@@ -126,6 +152,51 @@ function updateComponent(
   };
 }
 
+export type ComponentBehaviorPropertyKey = "aeroEnabled" | "throttleUpKey" | "throttleDownKey";
+
+export function setComponentBehaviorValue(
+  project: AerocelProject,
+  componentId: string,
+  key: ComponentBehaviorPropertyKey,
+  value: boolean | string | null
+): AerocelProject {
+  if (key === "aeroEnabled" && typeof value !== "boolean") {
+    throw new Error("Air reaction must be on or off.");
+  }
+  if (key !== "aeroEnabled" && value !== null && typeof value !== "string") {
+    throw new Error("The key binding must be a keyboard key.");
+  }
+  if (key !== "aeroEnabled" && typeof value === "string") {
+    if (!isPropellerBindingAllowed(value)) {
+      throw new Error("That key is reserved for aircraft controls.");
+    }
+    const duplicate = project.vehicle.components.find(
+      (component) =>
+        (component.id !== componentId || component.properties[key] !== value) &&
+        (component.properties.throttleUpKey === value ||
+          component.properties.throttleDownKey === value)
+    );
+    if (duplicate !== undefined) {
+      throw new Error(`${displayKeyboardCode(value)} is already used by ${duplicate.name}.`);
+    }
+  }
+  let found = false;
+  const components = project.vehicle.components.map((component) => {
+    if (component.id !== componentId) return component;
+    found = true;
+    const properties = { ...component.properties };
+    if (value === null) delete properties[key];
+    else properties[key] = value;
+    return { ...component, properties };
+  });
+  if (!found) throw new Error("The selected part no longer exists.");
+  return {
+    ...project,
+    updatedAt: new Date().toISOString(),
+    vehicle: { ...project.vehicle, components }
+  };
+}
+
 export function setComponentEngineeringValue(
   project: AerocelProject,
   componentId: string,
@@ -134,6 +205,9 @@ export function setComponentEngineeringValue(
 ): AerocelProject {
   if (!Number.isFinite(value)) throw new Error("The value must be a real number.");
   if (POSITIVE_KEYS.has(key) && value <= 0) throw new Error("The value must be greater than zero.");
+  if (NONNEGATIVE_KEYS.has(key) && value < 0) {
+    throw new Error("The value cannot be negative.");
+  }
   if (["massKg", "massUncertaintyKg", "powerW"].includes(key) && value < 0) {
     throw new Error("The value cannot be negative.");
   }

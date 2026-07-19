@@ -27,6 +27,7 @@ interface AircraftViewportProps {
   readonly geometryAssets?: ReadonlyMap<string, TriangleMesh>;
   readonly flightPose?: FlightViewportPose;
   readonly motorTiltRad?: number;
+  readonly controlSurfaceDeflections?: ReadonlyMap<string, number>;
 }
 
 export interface FlightViewportPose {
@@ -189,19 +190,35 @@ function SurfaceMesh({
   component,
   selected,
   onSelect,
-  explodedOffset
+  explodedOffset,
+  deflectionRad
 }: {
   readonly component: VehicleComponent;
   readonly selected: boolean;
   readonly onSelect: (id: string) => void;
   readonly explodedOffset: number;
+  readonly deflectionRad: number;
 }) {
-  const isWing = component.type === "wing";
+  const isVertical = component.type === "vertical_stabilizer" || component.type === "rudder";
+  const isHalfSurface =
+    component.type === "wing" || Math.abs(component.transform.translationM[1]) > 0.08;
   const dimensions = component.geometry.boundingBoxM;
   const centerBodyYM = component.transform.translationM[1];
   const geometries = useMemo(() => {
     const thickness = Math.max(0.02, dimensions[2]);
-    if (!isWing) {
+    if (isVertical) {
+      const geometry = taperedPrism(
+        dimensions[0],
+        Math.max(dimensions[2], 0.01),
+        0.62,
+        Math.max(dimensions[1], 0.012),
+        1,
+        -dimensions[0] * 0.1
+      );
+      geometry.rotateX(Math.PI / 2);
+      return [geometry];
+    }
+    if (!isHalfSurface) {
       return [
         taperedPrism(dimensions[0], dimensions[1] / 2, 0.64, thickness, -1, -0.025),
         taperedPrism(dimensions[0], dimensions[1] / 2, 0.64, thickness, 1, -0.025)
@@ -220,13 +237,15 @@ function SurfaceMesh({
         -dimensions[0] * 0.12
       )
     ];
-  }, [centerBodyYM, dimensions, isWing]);
+  }, [centerBodyYM, dimensions, isHalfSurface, isVertical]);
   useEffect(() => () => geometries.forEach((geometry) => geometry.dispose()), [geometries]);
   const bodyPosition = [...component.transform.translationM] as [number, number, number];
   if (component.type === "wing") bodyPosition[1] += Math.sign(bodyPosition[1]) * explodedOffset;
   const position = bodyToScene(bodyPosition);
   const [roll, pitch, yaw] = component.transform.rotationRad;
-  const rotation: [number, number, number] = [roll, -yaw, pitch];
+  const rotation: [number, number, number] = isVertical
+    ? [roll, -yaw - deflectionRad, pitch]
+    : [roll, -yaw, pitch + deflectionRad];
   return (
     <Selectable
       component={component}
@@ -241,6 +260,8 @@ function SurfaceMesh({
             color={selected ? "#77f2d2" : component.visual.color}
             roughness={0.54}
             metalness={0.08}
+            transparent={component.visual.opacity < 1}
+            opacity={component.visual.opacity}
             emissive={selected ? "#123f35" : "#000000"}
           />
         </mesh>
@@ -317,7 +338,8 @@ function ComponentMesh({
   onSelect,
   tiltRad,
   options,
-  importedMesh
+  importedMesh,
+  controlDeflectionRad
 }: {
   readonly component: VehicleComponent;
   readonly selected: boolean;
@@ -325,6 +347,7 @@ function ComponentMesh({
   readonly tiltRad: number;
   readonly options: ViewportOptions;
   readonly importedMesh: TriangleMesh | null;
+  readonly controlDeflectionRad: number;
 }) {
   const [x, y, z] = bodyToScene(component.transform.translationM);
   const commonMaterial = (
@@ -369,29 +392,31 @@ function ComponentMesh({
       </Selectable>
     );
   }
-  if (component.type === "wing" || component.type === "horizontal_stabilizer") {
+  if (
+    [
+      "wing",
+      "horizontal_stabilizer",
+      "vertical_stabilizer",
+      "canard",
+      "control_surface",
+      "flap",
+      "aileron",
+      "elevator",
+      "rudder",
+      "elevon",
+      "flaperon",
+      "spoiler",
+      "air_brake"
+    ].includes(component.type)
+  ) {
     return (
       <SurfaceMesh
         component={component}
         selected={selected}
         onSelect={onSelect}
         explodedOffset={options.exploded ? 0.18 : 0}
+        deflectionRad={controlDeflectionRad}
       />
-    );
-  }
-  if (component.type === "vertical_stabilizer") {
-    return (
-      <Selectable
-        component={component}
-        selected={selected}
-        onSelect={onSelect}
-        position={[x, y + 0.11, z]}
-      >
-        <mesh rotation={[Math.PI / 2, 0, 0]} castShadow>
-          <coneGeometry args={[0.19, 0.34, 3]} />
-          {commonMaterial}
-        </mesh>
-      </Selectable>
     );
   }
   if (component.type === "motor") {
@@ -506,6 +531,7 @@ function Scene({
   geometryAssets,
   flightPose,
   motorTiltRad,
+  controlSurfaceDeflections,
   onPartContextMenu
 }: AircraftViewportProps) {
   const motorTilt = new Map(
@@ -586,6 +612,7 @@ function Scene({
                     ? null
                     : (geometryAssets?.get(component.geometry.sourceSha256) ?? null)
                 }
+                controlDeflectionRad={controlSurfaceDeflections?.get(component.id) ?? 0}
               />
             ))}
           {options.showCg && (

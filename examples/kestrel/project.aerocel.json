@@ -233,6 +233,234 @@
         "properties": { "rootChordM": 0.3, "tipChordM": 0.13, "heightM": 0.34 }
       },
       {
+        "id": "0c11a111-1111-4aaa-8aaa-111111111111",
+        "name": "Port aileron",
+        "type": "aileron",
+        "parentId": "eaf5cad8-12ae-48e7-a392-75cf2d03fe67",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.04, -0.82, 0.012],
+          "rotationRad": [0.02, 0.035, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable port aileron",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.14, 0.44, 0.018],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#55e8c3", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.14,
+          "tipChordM": 0.11,
+          "semiSpanM": 0.44,
+          "aeroControlEffectivenessRad": 0.24434609527920614
+        }
+      },
+      {
+        "id": "0c22a222-2222-4aaa-8aaa-222222222222",
+        "name": "Starboard aileron",
+        "type": "aileron",
+        "parentId": "d591ac2c-b36c-4254-8cdd-81d8c9df7ecc",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.04, 0.82, 0.012],
+          "rotationRad": [-0.02, 0.035, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable starboard aileron",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.14, 0.44, 0.018],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#55e8c3", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.14,
+          "tipChordM": 0.11,
+          "semiSpanM": 0.44,
+          "aeroControlEffectivenessRad": 0.24434609527920614
+        }
+      },
+      {
+        "id": "0c33a333-3333-4aaa-8aaa-333333333333",
+        "name": "Elevator",
+        "type": "elevator",
+        "parentId": "7d7777fb-c3d6-452b-b562-24f552f6ab95",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.71, 0, -0.02],
+          "rotationRad": [0, -0.02, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable elevator",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.12, 0.64, 0.018],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#55e8c3", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.12,
+          "tipChordM": 0.09,
+          "semiSpanM": 0.32,
+          "aeroControlEffectivenessRad": 0.2792526803190927
+        }
+      },
+      {
+        "id": "0c44a444-4444-4aaa-8aaa-444444444444",
+        "name": "Rudder",
+        "type": "rudder",
+        "parentId": "78f82c6b-3c72-42de-ae89-a0fd6b93f8e4",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.72, 0, -0.17],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable rudder",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.12, 0.018, 0.25],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#ffbe59", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.12,
+          "tipChordM": 0.07,
+          "heightM": 0.25,
+          "aeroControlEffectivenessRad": 0.2792526803190927
+        }
+      },
+      {
+        "id": "0c55a555-5555-4aaa-8aaa-555555555555",
+        "name": "Port flap",
+        "type": "flap",
+        "parentId": "eaf5cad8-12ae-48e7-a392-75cf2d03fe67",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.04, -0.35, 0.01],
+          "rotationRad": [0.02, 0.035, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable port flap",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.15, 0.3, 0.018],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#65a8ff", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.15,
+          "tipChordM": 0.13,
+          "semiSpanM": 0.3,
+          "aeroControlEffectivenessRad": 0.3490658503988659
+        }
+      },
+      {
+        "id": "0c66a666-6666-4aaa-8aaa-666666666666",
+        "name": "Starboard flap",
+        "type": "flap",
+        "parentId": "d591ac2c-b36c-4254-8cdd-81d8c9df7ecc",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.04, 0.35, 0.01],
+          "rotationRad": [-0.02, 0.035, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable starboard flap",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.15, 0.3, 0.018],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#65a8ff", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.15,
+          "tipChordM": 0.13,
+          "semiSpanM": 0.3,
+          "aeroControlEffectivenessRad": 0.3490658503988659
+        }
+      },
+      {
         "id": "17be15fd-65b0-4a26-9207-f3832fc34f04",
         "name": "Port tilt motor",
         "type": "motor",
@@ -390,7 +618,12 @@
           "note": "Illustrative example mass"
         },
         "visual": { "color": "#3dd6b4", "opacity": 0.38 },
-        "properties": { "diameterM": 0.43, "pitchM": 0.18 }
+        "properties": {
+          "diameterM": 0.43,
+          "pitchM": 0.18,
+          "throttleUpKey": "Digit1",
+          "throttleDownKey": "Digit4"
+        }
       },
       {
         "id": "4f7d033f-e58d-41af-a08d-c8bf3f69c9f5",
@@ -430,7 +663,12 @@
           "note": "Illustrative example mass"
         },
         "visual": { "color": "#3dd6b4", "opacity": 0.38 },
-        "properties": { "diameterM": 0.43, "pitchM": 0.18 }
+        "properties": {
+          "diameterM": 0.43,
+          "pitchM": 0.18,
+          "throttleUpKey": "Digit2",
+          "throttleDownKey": "Digit5"
+        }
       },
       {
         "id": "daabdcf8-2326-429e-9306-ad6e45e3e47f",
@@ -470,7 +708,12 @@
           "note": "Illustrative example mass"
         },
         "visual": { "color": "#3dd6b4", "opacity": 0.38 },
-        "properties": { "diameterM": 0.43, "pitchM": 0.18 }
+        "properties": {
+          "diameterM": 0.43,
+          "pitchM": 0.18,
+          "throttleUpKey": "Digit3",
+          "throttleDownKey": "Digit6"
+        }
       },
       {
         "id": "b5afe607-a79b-4e6e-807d-10632bf4b673",

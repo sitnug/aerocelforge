@@ -120,8 +120,9 @@ STEP, IGES, 3MF, VSP3, URDF, SDF, and DXF need their named external adapter.
 Aerocel Forge shows them as unavailable instead of pretending an import worked.
 
 Click any part in the left sidebar to open its settings. Motor thrust, battery
-capacity, propeller size, wing dimensions, part weight, visibility, and colour
-are linked to the calculations that use them.
+capacity, propeller size and custom keys, wing/control-surface dimensions,
+per-part lift/drag/pressure inputs, part weight, visibility, and colour are linked
+to the calculations that use them.
 
 ## Fly the model
 
@@ -130,20 +131,27 @@ press **Fly**.
 
 ### Keyboard controls
 
-| Key   | Action            |
-| ----- | ----------------- |
-| W     | Pitch down        |
-| S     | Pitch up          |
-| A     | Bank left         |
-| D     | Bank right        |
-| Shift | Increase throttle |
-| Ctrl  | Decrease throttle |
-| Q / E | Change motor tilt |
-| Space | Fly or pause      |
+| Key   | Action                              |
+| ----- | ----------------------------------- |
+| W     | Elevator nose-down, only if fitted  |
+| S     | Elevator nose-up, only if fitted    |
+| A     | Ailerons bank left, only if fitted  |
+| D     | Ailerons bank right, only if fitted |
+| Z / X | Rudder left / right, only if fitted |
+| Shift | Increase combined throttle          |
+| Ctrl  | Decrease combined throttle          |
+| Q / E | Change motor tilt                   |
+| Space | Fly or pause                        |
 
 Controller mode accepts the two on-screen Mode 2 sticks or a standard gamepad.
 Only the selected input type controls the aircraft, so a connected gamepad does
 not overwrite keyboard input.
+
+Choose **Individual propellers** to set separate power and custom
+increase/decrease keys for every fitted propeller. Powered flight is locked when
+no usable propeller setup or charged battery exists. Air loads are calculated per
+part from local flow, size, angle, position, wind, stall/drag settings, and
+control-surface movement; imported meshes add triangle-derived pressure panels.
 
 See [docs/FLIGHT_SIMULATOR.md](docs/FLIGHT_SIMULATOR.md) for flight modes,
 waypoint commands, simulator physics, and known limits.

@@ -22,14 +22,20 @@ import {
   useMemo,
   useRef,
   useState,
-  type PointerEvent as ReactPointerEvent
+  type Dispatch,
+  type PointerEvent as ReactPointerEvent,
+  type SetStateAction
 } from "react";
 import type { AnalysisOptions, RapidAnalysis } from "../lib/analysis";
-import { configuredMotorThrustN } from "../lib/componentProperties";
+import { configuredMotorThrustN, setComponentBehaviorValue } from "../lib/componentProperties";
+import { deriveAircraftPhysics } from "../lib/aircraftPhysics";
 import {
+  applyIndividualPropellerThrottle,
   applyKeyboardThrottle,
+  displayKeyboardCode,
   isFlightKeyboardCode,
   isKeyboardControlPressed,
+  isPropellerBindingAllowed,
   keyboardFlightAxes,
   keyboardThrottleDirection,
   type FlightInputMethod
@@ -51,6 +57,7 @@ import { InfoTip } from "./InfoTip";
 
 interface FlightLabProps {
   readonly project: AerocelProject;
+  readonly setProject: Dispatch<SetStateAction<AerocelProject>>;
   readonly analysis: RapidAnalysis;
   readonly analysisOptions: AnalysisOptions;
   readonly selectedId: string | null;
@@ -100,11 +107,18 @@ function initialInputMethod(): FlightInputMethod {
 function initialPilot(model: FlightModel, preset: FlightPreset): PilotInput {
   return {
     throttle:
-      preset === "hover" ? clamp((model.massKg * 9.80665) / model.maximumTotalThrustN, 0, 1) : 0.42,
+      preset === "hover" && model.maximumTotalThrustN > 0
+        ? clamp((model.massKg * 9.80665) / model.maximumTotalThrustN, 0, 1)
+        : preset === "cruise"
+          ? 0.42
+          : 0,
     roll: 0,
     pitch: 0,
     yaw: 0,
-    tiltRad: preset === "hover" ? Math.PI / 2 : 0
+    flaps: 0,
+    tiltRad: preset === "hover" ? Math.PI / 2 : 0,
+    propellerControl: "aircraft",
+    propellerThrottles: Object.fromEntries(model.propulsors.map((item) => [item.id, 0]))
   };
 }
 
@@ -212,6 +226,66 @@ function ChannelSlider({
   );
 }
 
+function FlightKeyBindingButton({
+  label,
+  context,
+  value,
+  onCommit,
+  notify
+}: {
+  readonly label: string;
+  readonly context: string;
+  readonly value: string | null;
+  readonly onCommit: (value: string | null) => void;
+  readonly notify: (message: string) => void;
+}) {
+  const [capturing, setCapturing] = useState(false);
+  useEffect(() => {
+    if (!capturing) return;
+    const capture = (event: KeyboardEvent): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.code === "Escape") {
+        setCapturing(false);
+        return;
+      }
+      if (!isPropellerBindingAllowed(event.code)) {
+        notify(
+          "That key already controls the aircraft. Choose a number, arrow, or other unused key."
+        );
+        return;
+      }
+      onCommit(event.code);
+      setCapturing(false);
+    };
+    window.addEventListener("keydown", capture, true);
+    return () => window.removeEventListener("keydown", capture, true);
+  }, [capturing, notify, onCommit]);
+  return (
+    <span className="flight-key-binding">
+      <small>{label}</small>
+      <button
+        type="button"
+        className={capturing ? "is-capturing" : ""}
+        aria-label={`${context} ${label.toLowerCase()} power key: ${capturing ? "waiting for a key" : displayKeyboardCode(value)}`}
+        onClick={() => setCapturing(true)}
+      >
+        <kbd>{capturing ? "Press key…" : displayKeyboardCode(value)}</kbd>
+      </button>
+      {value !== null && (
+        <button
+          type="button"
+          className="flight-key-binding__clear"
+          aria-label={`Clear ${context} ${label.toLowerCase()} power key`}
+          onClick={() => onCommit(null)}
+        >
+          ×
+        </button>
+      )}
+    </span>
+  );
+}
+
 export function FlightLab(props: FlightLabProps) {
   const battery = props.project.vehicle.batteries[0];
   const model = useMemo<FlightModel>(() => {
@@ -219,7 +293,7 @@ export function FlightLab(props: FlightLabProps) {
       props.project.vehicle.reference.spanM ** 2 / props.project.vehicle.reference.areaM2;
     const batteryEnergyWh =
       battery === undefined
-        ? 200
+        ? 1
         : battery.series *
           battery.parallel *
           battery.cellOpenCircuitVoltageV *
@@ -248,22 +322,33 @@ export function FlightLab(props: FlightLabProps) {
       Math.max(1, motorPowerLimitW)
     );
     const powerLimitRatio = clamp(maximumPowerW / estimatedElectricalPowerW, 0, 1);
+    const rawThrustByUnitId = new Map<string, number>();
     const configuredTotalThrustN = props.project.vehicle.propulsionUnits.reduce((sum, unit) => {
       const calculated = props.analysis.propellers.find((item) => item.unitId === unit.id)?.result
         .thrustN;
-      return (
-        sum +
-        (configuredMotorThrustN(props.project, unit.motorComponentId) ??
-          Math.max(0, calculated ?? props.analysis.propeller.thrustN))
-      );
+      const thrustN =
+        configuredMotorThrustN(props.project, unit.motorComponentId) ??
+        Math.max(0, calculated ?? props.analysis.propeller.thrustN);
+      rawThrustByUnitId.set(unit.id, thrustN);
+      return sum + thrustN;
     }, 0);
-    const maximumTotalThrustN = Math.max(
-      0.001,
-      configuredTotalThrustN * powerLimitRatio ** (2 / 3)
+    const thrustPowerScale = powerLimitRatio ** (2 / 3);
+    const maximumThrustByUnitId = new Map(
+      [...rawThrustByUnitId].map(
+        ([unitId, thrustN]) => [unitId, thrustN * thrustPowerScale] as const
+      )
+    );
+    const maximumTotalThrustN = configuredTotalThrustN * thrustPowerScale;
+    const aircraftPhysics = deriveAircraftPhysics(
+      props.project,
+      props.geometryAssets,
+      maximumThrustByUnitId,
+      props.analysis.designPoint.finiteWingLiftSlopePerRad
     );
     return {
       massKg: props.analysis.mass.massKg,
       inertiaBodyKgM2: props.analysis.mass.inertiaAtCgKgM2,
+      centerOfGravityBodyM: props.analysis.mass.centerOfGravityM,
       densityKgM3: props.analysis.atmosphere.densityKgM3,
       wingAreaM2: props.project.vehicle.reference.areaM2,
       wingSpanM: props.project.vehicle.reference.spanM,
@@ -278,9 +363,31 @@ export function FlightLab(props: FlightLabProps) {
       maximumTotalThrustN,
       maximumPowerW,
       batteryEnergyWh,
-      nominalVoltageV
+      nominalVoltageV,
+      surfaces: aircraftPhysics.surfaces,
+      panels: aircraftPhysics.panels,
+      propulsors: aircraftPhysics.propulsors
     };
-  }, [battery, props.analysis, props.analysisOptions.additionalDragCounts, props.project]);
+  }, [
+    battery,
+    props.analysis,
+    props.analysisOptions.additionalDragCounts,
+    props.geometryAssets,
+    props.project
+  ]);
+  const hasBattery = battery !== undefined && battery.stateOfCharge > 0;
+  const hasPropulsion = model.propulsors.length > 0 && model.maximumTotalThrustN > 0;
+  const canPoweredFlight = hasBattery && hasPropulsion;
+  const hasRollSurface = model.surfaces.some((surface) =>
+    ["roll", "elevon", "flaperon"].includes(surface.control)
+  );
+  const hasPitchSurface = model.surfaces.some((surface) =>
+    ["pitch", "elevon"].includes(surface.control)
+  );
+  const hasYawSurface = model.surfaces.some((surface) => surface.control === "yaw");
+  const hasFlapSurface = model.surfaces.some((surface) =>
+    ["flap", "brake", "flaperon"].includes(surface.control)
+  );
 
   const [preset, setPreset] = useState<FlightPreset>("hover");
   const [mode, setMode] = useState<FlightMode>("stabilize");
@@ -290,6 +397,7 @@ export function FlightLab(props: FlightLabProps) {
   const [flight, setFlight] = useState(() => createInitialFlightState(model, "hover"));
   const [windNorthMS, setWindNorthMS] = useState(0);
   const [windEastMS, setWindEastMS] = useState(0);
+  const [windUpMS, setWindUpMS] = useState(0);
   const [programSource, setProgramSource] = useState(
     () => localStorage.getItem("aerocel.flight.program") ?? DEFAULT_PROGRAM
   );
@@ -324,8 +432,8 @@ export function FlightLab(props: FlightLabProps) {
     automationRef.current = automation;
   }, [automation]);
   useEffect(() => {
-    windRef.current = [windNorthMS, windEastMS, 0];
-  }, [windEastMS, windNorthMS]);
+    windRef.current = [windNorthMS, windEastMS, -windUpMS];
+  }, [windEastMS, windNorthMS, windUpMS]);
 
   const resetFlight = (nextPreset = preset): void => {
     setPreset(nextPreset);
@@ -346,6 +454,54 @@ export function FlightLab(props: FlightLabProps) {
     localStorage.setItem("aerocel.flight.inputMethod", nextMethod);
     setPressedKeyboardCodes([]);
     setPilot((current) => ({ ...current, roll: 0, pitch: 0, yaw: 0 }));
+  };
+
+  const choosePropellerControl = (selection: PilotInput["propellerControl"]): void => {
+    if (selection === "individual") {
+      chooseInputMethod("keyboard");
+      setMode("manual");
+    }
+    setPilot((current) => ({
+      ...current,
+      propellerControl: selection,
+      propellerThrottles:
+        selection === "individual"
+          ? Object.fromEntries(
+              model.propulsors.map((item) => [item.id, current.propellerThrottles[item.id] ?? 0])
+            )
+          : current.propellerThrottles
+    }));
+  };
+
+  const commitPropellerBinding = (
+    propellerComponentId: string,
+    key: "throttleUpKey" | "throttleDownKey",
+    value: string | null
+  ): void => {
+    if (value !== null) {
+      const duplicate = model.propulsors.find(
+        (item) =>
+          item.propellerComponentId !== propellerComponentId &&
+          (item.throttleUpKey === value || item.throttleDownKey === value)
+      );
+      if (duplicate !== undefined) {
+        props.notify(`${displayKeyboardCode(value)} is already used by ${duplicate.name}.`);
+        return;
+      }
+    }
+    props.setProject((current) =>
+      setComponentBehaviorValue(current, propellerComponentId, key, value)
+    );
+  };
+
+  const startGlideTest = (): void => {
+    const nextPilot = initialPilot(model, "cruise");
+    setPreset("cruise");
+    setPilot({ ...nextPilot, throttle: 0 });
+    setFlight(createInitialFlightState(model, "cruise"));
+    setMode("manual");
+    setRunning(true);
+    props.notify("Glide test started with every propeller at zero power.");
   };
 
   useEffect(() => {
@@ -408,6 +564,11 @@ export function FlightLab(props: FlightLabProps) {
       return;
     }
     const pressed = new Set<string>();
+    const customCodes = new Set(
+      model.propulsors.flatMap((item) =>
+        [item.throttleUpKey, item.throttleDownKey].filter((code): code is string => code !== null)
+      )
+    );
     let frameId = 0;
     let previousTime = performance.now();
     const isTypingTarget = (target: EventTarget | null): boolean =>
@@ -418,9 +579,9 @@ export function FlightLab(props: FlightLabProps) {
     const updateAxes = (): void => {
       const axes = keyboardFlightAxes(pressed);
       setPilot((current) =>
-        current.roll === axes.roll && current.pitch === axes.pitch && current.yaw === 0
+        current.roll === axes.roll && current.pitch === axes.pitch && current.yaw === axes.yaw
           ? current
-          : { ...current, ...axes, yaw: 0 }
+          : { ...current, ...axes }
       );
     };
     const releaseAll = (): void => {
@@ -429,11 +590,16 @@ export function FlightLab(props: FlightLabProps) {
       updateAxes();
     };
     const keyDown = (event: KeyboardEvent): void => {
-      if (isTypingTarget(event.target) || !isFlightKeyboardCode(event.code)) return;
+      if (
+        isTypingTarget(event.target) ||
+        (!isFlightKeyboardCode(event.code) && !customCodes.has(event.code))
+      )
+        return;
       pressed.add(event.code);
       syncPressedKeys();
       updateAxes();
       if (
+        pilotRef.current.propellerControl === "aircraft" &&
         !event.repeat &&
         ["ShiftLeft", "ShiftRight", "Shift", "ControlLeft", "ControlRight", "Control"].includes(
           event.code
@@ -456,11 +622,13 @@ export function FlightLab(props: FlightLabProps) {
           tiltRad: clamp(current.tiltRad - (5 * Math.PI) / 180, 0, Math.PI / 2)
         }));
       }
-      if (!event.repeat && event.code === "Space") setRunning((current) => !current);
+      if (!event.repeat && event.code === "Space" && (running || canPoweredFlight)) {
+        setRunning((current) => !current);
+      }
       event.preventDefault();
     };
     const keyUp = (event: KeyboardEvent): void => {
-      if (!isFlightKeyboardCode(event.code)) return;
+      if (!isFlightKeyboardCode(event.code) && !customCodes.has(event.code)) return;
       pressed.delete(event.code);
       syncPressedKeys();
       updateAxes();
@@ -469,10 +637,31 @@ export function FlightLab(props: FlightLabProps) {
     const updateThrottle = (time: number): void => {
       const elapsedSeconds = (time - previousTime) / 1_000;
       previousTime = time;
-      if (keyboardThrottleDirection(pressed) !== 0) {
+      if (
+        pilotRef.current.propellerControl === "aircraft" &&
+        keyboardThrottleDirection(pressed) !== 0
+      ) {
         setPilot((current) => {
           const throttle = applyKeyboardThrottle(current.throttle, pressed, elapsedSeconds);
           return throttle === current.throttle ? current : { ...current, throttle };
+        });
+      }
+      if (pilotRef.current.propellerControl === "individual") {
+        setPilot((current) => {
+          let changed = false;
+          const propellerThrottles = { ...current.propellerThrottles };
+          for (const propulsor of model.propulsors) {
+            const previous = propellerThrottles[propulsor.id] ?? 0;
+            const next = applyIndividualPropellerThrottle(
+              previous,
+              propulsor.throttleUpKey !== null && pressed.has(propulsor.throttleUpKey),
+              propulsor.throttleDownKey !== null && pressed.has(propulsor.throttleDownKey),
+              elapsedSeconds
+            );
+            propellerThrottles[propulsor.id] = next;
+            changed ||= next !== previous;
+          }
+          return changed ? { ...current, propellerThrottles } : current;
         });
       }
       frameId = window.requestAnimationFrame(updateThrottle);
@@ -487,7 +676,7 @@ export function FlightLab(props: FlightLabProps) {
       window.removeEventListener("keyup", keyUp);
       window.removeEventListener("blur", releaseAll);
     };
-  }, [inputMethod]);
+  }, [canPoweredFlight, inputMethod, model.propulsors, running]);
 
   useEffect(() => {
     if (!focusMode) return;
@@ -547,6 +736,41 @@ export function FlightLab(props: FlightLabProps) {
   const insufficientHoverThrust = model.maximumTotalThrustN < model.massKg * 9.80665;
   const displayedPhase = !running && flight.phase === "flying" ? "paused" : flight.phase;
   const pressedKeyboardSet = new Set(pressedKeyboardCodes);
+  const strongestSurfaceLoads = [...flight.diagnostics.surfaceLoads]
+    .sort(
+      (left, right) =>
+        right.liftN + right.dragN + right.sideForceN - (left.liftN + left.dragN + left.sideForceN)
+    )
+    .slice(0, 6);
+  const controlSurfaceDeflections = new Map(
+    model.surfaces.flatMap((surface): readonly [string, number][] => {
+      let command = 0;
+      if (surface.control === "roll") command = flight.appliedControls.roll * surface.controlSign;
+      else if (surface.control === "pitch") {
+        command = flight.appliedControls.pitch * surface.controlSign;
+      } else if (surface.control === "yaw") {
+        command = flight.appliedControls.yaw * surface.controlSign;
+      } else if (surface.control === "flap" || surface.control === "brake") {
+        command = flight.appliedControls.flaps;
+      } else if (surface.control === "elevon") {
+        const rollSign = surface.positionBodyM[1] < 0 ? 1 : -1;
+        const pitchSign = surface.positionBodyM[0] < 0 ? -1 : 1;
+        command = clamp(
+          flight.appliedControls.roll * rollSign + flight.appliedControls.pitch * pitchSign,
+          -1,
+          1
+        );
+      } else if (surface.control === "flaperon") {
+        const rollSign = surface.positionBodyM[1] < 0 ? 1 : -1;
+        command = clamp(
+          flight.appliedControls.roll * rollSign + flight.appliedControls.flaps,
+          -1,
+          1
+        );
+      } else return [];
+      return [[surface.componentId, command * surface.controlEffectivenessRad]];
+    })
+  );
 
   return (
     <div className="scroll-workspace flight-lab">
@@ -575,13 +799,69 @@ export function FlightLab(props: FlightLabProps) {
             className="button button--primary"
             type="button"
             onClick={() => setRunning((current) => !current)}
-            disabled={["crashed", "landed", "battery_depleted"].includes(flight.phase)}
+            disabled={
+              ["crashed", "landed", "battery_depleted"].includes(flight.phase) ||
+              (!running && !canPoweredFlight)
+            }
+            title={
+              !canPoweredFlight
+                ? "Powered flight needs at least one usable propeller setup and a charged battery."
+                : undefined
+            }
           >
             {running ? <Pause size={15} /> : <Play size={15} />}
             {running ? "Pause" : "Fly"}
           </button>
         </div>
       </header>
+
+      <section className="flight-preflight section-card" aria-label="Flight readiness">
+        <div className="flight-preflight__summary">
+          <span className={hasPropulsion ? "is-ready" : "is-missing"}>
+            <strong>{model.propulsors.length}</strong>
+            <small>usable propellers</small>
+          </span>
+          <span className={hasBattery ? "is-ready" : "is-missing"}>
+            <strong>{hasBattery ? "Ready" : "Missing"}</strong>
+            <small>charged battery</small>
+          </span>
+          <span className={model.surfaces.length > 0 ? "is-ready" : "is-missing"}>
+            <strong>{model.surfaces.length}</strong>
+            <small>air surfaces</small>
+          </span>
+          <span className={model.panels.length > 0 ? "is-ready" : "is-missing"}>
+            <strong>{model.panels.length}</strong>
+            <small>body pressure panels</small>
+          </span>
+        </div>
+        {!canPoweredFlight && (
+          <div className="flight-preflight__blocker" role="status">
+            <AlertTriangle size={17} />
+            <span>
+              <strong>Powered flight is locked</strong>
+              <p>
+                {!hasPropulsion
+                  ? "Add a connected motor and propeller with a positive thrust value. A shape cannot create motor thrust by itself."
+                  : "Add a charged battery before powered flight."}
+              </p>
+            </span>
+            <button type="button" className="button button--quiet" onClick={startGlideTest}>
+              Glide test · motors off
+            </button>
+          </div>
+        )}
+        <div className="flight-axis-checks">
+          <span className={hasPitchSurface ? "is-ready" : "is-missing"}>
+            Pitch: {hasPitchSurface ? "movable surface found" : "no elevator, elevon, or canard"}
+          </span>
+          <span className={hasRollSurface ? "is-ready" : "is-missing"}>
+            Bank: {hasRollSurface ? "movable surface found" : "no aileron, elevon, or flaperon"}
+          </span>
+          <span className={hasYawSurface ? "is-ready" : "is-missing"}>
+            Turn: {hasYawSurface ? "rudder found" : "no rudder"}
+          </span>
+        </div>
+      </section>
 
       <section
         className={`flight-stage section-card ${focusMode ? "flight-stage--fullscreen" : ""}`}
@@ -656,6 +936,7 @@ export function FlightLab(props: FlightLabProps) {
             }
             geometryAssets={props.geometryAssets}
             motorTiltRad={flight.motorTiltRad}
+            controlSurfaceDeflections={controlSurfaceDeflections}
             flightPose={{
               positionNedM: flight.rigidBody.positionNedM,
               attitudeBodyToNed: flight.rigidBody.attitudeBodyToNed,
@@ -723,7 +1004,7 @@ export function FlightLab(props: FlightLabProps) {
         </div>
       )}
 
-      {insufficientHoverThrust && (
+      {hasPropulsion && insufficientHoverThrust && (
         <div className="notice notice--warning flight-envelope-warning">
           <AlertTriangle size={17} />
           <span>
@@ -786,12 +1067,54 @@ export function FlightLab(props: FlightLabProps) {
               </span>
             </button>
           </div>
+          <div className="propeller-control-choice">
+            <div className="heading-with-help">
+              <strong>How propellers respond</strong>
+              <InfoTip label="Propeller control mode" align="right">
+                Aircraft controls use one throttle and a physical motor mixer for hovering.
+                Individual propellers lets you change each motor separately with your own keys. In
+                forward flight, bank, pitch, and rudder still come only from matching movable parts.
+              </InfoTip>
+            </div>
+            <div
+              className="control-method-selector"
+              role="group"
+              aria-label="Propeller control mode"
+            >
+              <button
+                type="button"
+                className={pilot.propellerControl === "aircraft" ? "is-active" : ""}
+                aria-pressed={pilot.propellerControl === "aircraft"}
+                onClick={() => choosePropellerControl("aircraft")}
+              >
+                <Gauge size={16} />
+                <span>
+                  <strong>Aircraft controls</strong>
+                  <small>One throttle</small>
+                </span>
+              </button>
+              <button
+                type="button"
+                className={pilot.propellerControl === "individual" ? "is-active" : ""}
+                aria-pressed={pilot.propellerControl === "individual"}
+                disabled={model.propulsors.length === 0}
+                onClick={() => choosePropellerControl("individual")}
+              >
+                <Keyboard size={16} />
+                <span>
+                  <strong>Individual propellers</strong>
+                  <small>Separate keys and power</small>
+                </span>
+              </button>
+            </div>
+          </div>
           <div className="mode-selector" aria-label="Flight mode">
             {(["manual", "stabilize", "altitude_hold", "return_home"] as const).map((selection) => (
               <button
                 key={selection}
                 type="button"
                 className={mode === selection ? "is-active" : ""}
+                disabled={pilot.propellerControl === "individual" && selection !== "manual"}
                 onClick={() => setMode(selection)}
               >
                 {MODE_LABELS[selection]}
@@ -826,12 +1149,30 @@ export function FlightLab(props: FlightLabProps) {
               <div className="keyboard-key-grid">
                 {(
                   [
-                    ["W", "Pitch down", "pitch-down"],
-                    ["S", "Pitch up", "pitch-up"],
-                    ["A", "Bank left", "left"],
-                    ["D", "Bank right", "right"],
-                    ["Shift", "More throttle", "throttle-up"],
-                    ["Ctrl", "Less throttle", "throttle-down"]
+                    [
+                      "W",
+                      hasPitchSurface ? "Elevator: nose down" : "No pitch surface",
+                      "pitch-down"
+                    ],
+                    ["S", hasPitchSurface ? "Elevator: nose up" : "No pitch surface", "pitch-up"],
+                    ["A", hasRollSurface ? "Ailerons: bank left" : "No bank surface", "left"],
+                    ["D", hasRollSurface ? "Ailerons: bank right" : "No bank surface", "right"],
+                    ["Z", hasYawSurface ? "Rudder left" : "No rudder", "yaw-left"],
+                    ["X", hasYawSurface ? "Rudder right" : "No rudder", "yaw-right"],
+                    [
+                      "Shift",
+                      pilot.propellerControl === "aircraft"
+                        ? "More throttle"
+                        : "Use propeller keys",
+                      "throttle-up"
+                    ],
+                    [
+                      "Ctrl",
+                      pilot.propellerControl === "aircraft"
+                        ? "Less throttle"
+                        : "Use propeller keys",
+                      "throttle-down"
+                    ]
                   ] as const
                 ).map(([key, label, control]) => (
                   <div
@@ -853,10 +1194,110 @@ export function FlightLab(props: FlightLabProps) {
                   <strong>{pilot.roll === 0 ? "Center" : pilot.roll < 0 ? "Left" : "Right"}</strong>
                 </span>
                 <span>
+                  <small>Rudder</small>
+                  <strong>{pilot.yaw === 0 ? "Center" : pilot.yaw < 0 ? "Left" : "Right"}</strong>
+                </span>
+                <span>
                   <small>Throttle</small>
-                  <strong>{(pilot.throttle * 100).toFixed(0)}%</strong>
+                  <strong>
+                    {pilot.propellerControl === "aircraft"
+                      ? `${(pilot.throttle * 100).toFixed(0)}%`
+                      : "Separate"}
+                  </strong>
                 </span>
               </div>
+            </div>
+          )}
+          {pilot.propellerControl === "individual" && (
+            <div className="individual-propeller-controls">
+              <div className="individual-propeller-controls__header">
+                <strong>Individual propeller power</strong>
+                <span>Hold a saved key or use + / −</span>
+              </div>
+              {model.propulsors.map((propulsor) => {
+                const throttle = pilot.propellerThrottles[propulsor.id] ?? 0;
+                return (
+                  <article key={propulsor.id} className="individual-propeller-row">
+                    <div>
+                      <strong>{propulsor.name}</strong>
+                      <small>
+                        Position{" "}
+                        {propulsor.positionBodyM.map((value) => value.toFixed(2)).join(", ")} m
+                      </small>
+                    </div>
+                    <output>{(throttle * 100).toFixed(0)}%</output>
+                    <div className="individual-propeller-row__buttons">
+                      <button
+                        type="button"
+                        aria-label={`Reduce ${propulsor.name} power`}
+                        onClick={() =>
+                          setPilot((current) => ({
+                            ...current,
+                            propellerThrottles: {
+                              ...current.propellerThrottles,
+                              [propulsor.id]: clamp(
+                                (current.propellerThrottles[propulsor.id] ?? 0) - 0.05,
+                                0,
+                                1
+                              )
+                            }
+                          }))
+                        }
+                      >
+                        −
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={`Increase ${propulsor.name} power`}
+                        onClick={() =>
+                          setPilot((current) => ({
+                            ...current,
+                            propellerThrottles: {
+                              ...current.propellerThrottles,
+                              [propulsor.id]: clamp(
+                                (current.propellerThrottles[propulsor.id] ?? 0) + 0.05,
+                                0,
+                                1
+                              )
+                            }
+                          }))
+                        }
+                      >
+                        +
+                      </button>
+                    </div>
+                    <FlightKeyBindingButton
+                      label="More"
+                      context={propulsor.name}
+                      value={propulsor.throttleUpKey}
+                      onCommit={(value) =>
+                        commitPropellerBinding(
+                          propulsor.propellerComponentId,
+                          "throttleUpKey",
+                          value
+                        )
+                      }
+                      notify={props.notify}
+                    />
+                    <FlightKeyBindingButton
+                      label="Less"
+                      context={propulsor.name}
+                      value={propulsor.throttleDownKey}
+                      onCommit={(value) =>
+                        commitPropellerBinding(
+                          propulsor.propellerComponentId,
+                          "throttleDownKey",
+                          value
+                        )
+                      }
+                      notify={props.notify}
+                    />
+                    <span className="individual-propeller-row__bar">
+                      <span style={{ width: `${throttle * 100}%` }} />
+                    </span>
+                  </article>
+                );
+              })}
             </div>
           )}
           <ChannelSlider
@@ -870,6 +1311,17 @@ export function FlightLab(props: FlightLabProps) {
               setPilot((current) => ({ ...current, tiltRad: (value * Math.PI) / 180 }))
             }
           />
+          {hasFlapSurface && (
+            <ChannelSlider
+              label="Flaps / air brakes"
+              value={pilot.flaps * 100}
+              minimum={0}
+              maximum={100}
+              step={1}
+              unit="%"
+              onChange={(value) => setPilot((current) => ({ ...current, flaps: value / 100 }))}
+            />
+          )}
           <div className="remote-presets">
             <button
               type="button"
@@ -888,7 +1340,9 @@ export function FlightLab(props: FlightLabProps) {
           </div>
           <p className="control-hint">
             {inputMethod === "keyboard"
-              ? "Hold Shift or Ctrl to change throttle smoothly. Q/E changes motor tilt. Space starts or pauses the flight."
+              ? pilot.propellerControl === "individual"
+                ? "Hold each saved propeller key to change that motor. W/S moves real pitch surfaces, A/D moves real bank surfaces, and Z/X moves a real rudder. Missing parts mean no response."
+                : "Hold Shift or Ctrl to change throttle. W/S moves real pitch surfaces, A/D moves real bank surfaces, and Z/X moves a real rudder. Q/E changes motor tilt."
               : "Use the on-screen sticks or a standard connected gamepad. The left stick handles throttle and turning; the right stick handles pitch and bank."}
           </p>
         </section>
@@ -963,6 +1417,17 @@ export function FlightLab(props: FlightLabProps) {
             unit="m/s"
             onChange={setWindEastMS}
           />
+          {props.advancedMode && (
+            <ChannelSlider
+              label="Upward wind"
+              value={windUpMS}
+              minimum={-10}
+              maximum={10}
+              step={0.5}
+              unit="m/s"
+              onChange={setWindUpMS}
+            />
+          )}
           <div className="autopilot-readout">
             <span>
               <small>ROLL</small>
@@ -1098,6 +1563,36 @@ export function FlightLab(props: FlightLabProps) {
               <strong>{flight.distanceTravelledM.toFixed(0)} m</strong>
             </span>
           </div>
+          {props.advancedMode && strongestSurfaceLoads.length > 0 && (
+            <div className="surface-load-table" aria-label="Strongest air loads by part">
+              <div className="surface-load-table__heading">
+                <strong>Air force by part</strong>
+                <InfoTip label="Air force by part" align="right">
+                  Every row is calculated at that part’s actual size, angle, and position. Pressure
+                  is local air pressure from motion and wind, not a CFD pressure map.
+                </InfoTip>
+              </div>
+              <div className="surface-load-table__columns" aria-hidden="true">
+                <span>Part</span>
+                <span>Pressure</span>
+                <span>Lift</span>
+                <span>Drag</span>
+              </div>
+              {strongestSurfaceLoads.map((load) => (
+                <button
+                  key={load.componentId}
+                  type="button"
+                  className={props.selectedId === load.componentId ? "is-selected" : ""}
+                  onClick={() => props.onSelect(load.componentId)}
+                >
+                  <strong>{load.name}</strong>
+                  <span>{load.dynamicPressurePa.toFixed(0)} Pa</span>
+                  <span>{load.liftN.toFixed(1)} N</span>
+                  <span>{load.dragN.toFixed(1)} N</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div
             className="battery-track"
             aria-label={`${telemetry.batteryPercent.toFixed(0)}% battery`}
@@ -1107,8 +1602,9 @@ export function FlightLab(props: FlightLabProps) {
           <div className="flight-model-note">
             <Battery size={15} />
             <p>
-              This is a quick six-direction flight model built from the current aircraft, motor, and
-              battery estimates. Use a real autopilot simulator and measured aircraft data before
+              Live flight uses local air flow on each enabled part and pressure panels on imported
+              meshes. Controls only act through matching movable surfaces or real propeller forces.
+              Calibrate the coefficients with VSPAERO, CFD, wind-tunnel, or flight-test data before
               making real-flight decisions.
             </p>
           </div>

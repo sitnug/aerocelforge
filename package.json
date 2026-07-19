@@ -19,7 +19,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
-    "python:check": "python3 -m compileall -q services/scientific-orchestrator && cd services/scientific-orchestrator && python3 -m unittest discover -s tests",
+    "python:check": "python3 -m compileall -q -x '(^|/)(\\.venv|venv|__pycache__)(/|$)' services/scientific-orchestrator && cd services/scientific-orchestrator && python3 -m unittest discover -s tests",
     "python:lint": ".venv/bin/ruff check services/scientific-orchestrator",
     "python:typecheck": "cd services/scientific-orchestrator && ../../.venv/bin/mypy aerocel_service",
     "rust:check": "cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml",

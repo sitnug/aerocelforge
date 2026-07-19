@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { halfSurfaceRootTipBodyY } from "./aircraftPresentation";
 import {
+  aerodynamicAndPropulsiveLoads,
   compileFlightProgram,
   createInitialFlightState,
   deriveFlightTelemetry,
@@ -16,6 +17,7 @@ import { kestrelProject } from "./kestrel";
 const model: FlightModel = {
   massKg: 8,
   inertiaBodyKgM2: [1.4, 0, 0, 0, 1.8, 0, 0, 0, 2.2],
+  centerOfGravityBodyM: [0, 0, 0],
   densityKgM3: 1.225,
   wingAreaM2: 0.82,
   wingSpanM: 2.4,
@@ -30,7 +32,98 @@ const model: FlightModel = {
   maximumTotalThrustN: 8 * 9.80665 * 1.55,
   maximumPowerW: 3_900,
   batteryEnergyWh: 220,
-  nominalVoltageV: 22.2
+  nominalVoltageV: 22.2,
+  surfaces: [
+    {
+      componentId: "wing",
+      parentComponentId: null,
+      name: "Main wing",
+      kind: "horizontal",
+      positionBodyM: [0, 0, 0],
+      chordDirectionBody: [1, 0, 0],
+      spanDirectionBody: [0, 1, 0],
+      areaM2: 0.72,
+      chordM: 0.36,
+      liftSlopePerRad: 4.7,
+      zeroLiftAngleRad: (-2 * Math.PI) / 180,
+      stallAngleRad: (15 * Math.PI) / 180,
+      maximumLiftCoefficient: 1.35,
+      baseDragCoefficient: 0.026,
+      inducedDragFactor: 0.055,
+      control: "none",
+      controlSign: 1,
+      controlEffectivenessRad: 0
+    },
+    ...([-1, 1] as const).map((side) => ({
+      componentId: `aileron-${side}`,
+      parentComponentId: "wing",
+      name: side < 0 ? "Left aileron" : "Right aileron",
+      kind: "horizontal" as const,
+      positionBodyM: [-0.05, side * 0.8, 0] as const,
+      chordDirectionBody: [1, 0, 0] as const,
+      spanDirectionBody: [0, 1, 0] as const,
+      areaM2: 0.05,
+      chordM: 0.14,
+      liftSlopePerRad: 4.1,
+      zeroLiftAngleRad: 0,
+      stallAngleRad: (18 * Math.PI) / 180,
+      maximumLiftCoefficient: 1.1,
+      baseDragCoefficient: 0.024,
+      inducedDragFactor: 0.08,
+      control: "roll" as const,
+      controlSign: -side,
+      controlEffectivenessRad: (14 * Math.PI) / 180
+    })),
+    {
+      componentId: "elevator",
+      parentComponentId: null,
+      name: "Elevator",
+      kind: "horizontal",
+      positionBodyM: [-0.7, 0, 0],
+      chordDirectionBody: [1, 0, 0],
+      spanDirectionBody: [0, 1, 0],
+      areaM2: 0.08,
+      chordM: 0.15,
+      liftSlopePerRad: 3.8,
+      zeroLiftAngleRad: 0,
+      stallAngleRad: (18 * Math.PI) / 180,
+      maximumLiftCoefficient: 1,
+      baseDragCoefficient: 0.024,
+      inducedDragFactor: 0.08,
+      control: "pitch",
+      controlSign: -1,
+      controlEffectivenessRad: (16 * Math.PI) / 180
+    }
+  ],
+  panels: [],
+  propulsors: [
+    {
+      id: "left-propulsor",
+      name: "Left propulsor",
+      propellerComponentId: "left-propeller",
+      positionBodyM: [0, -0.5, 0],
+      axisBody: [1, 0, 0],
+      maximumThrustN: (8 * 9.80665 * 1.55) / 2,
+      maximumPowerW: 1_950,
+      diameterM: 0.42,
+      rotation: "CW",
+      throttleUpKey: "Digit1",
+      throttleDownKey: "Digit2"
+    },
+    {
+      id: "right-propulsor",
+      name: "Right propulsor",
+      propellerComponentId: "right-propeller",
+      positionBodyM: [0, 0.5, 0],
+      axisBody: [1, 0, 0],
+      maximumThrustN: (8 * 9.80665 * 1.55) / 2,
+      maximumPowerW: 1_950,
+      diameterM: 0.42,
+      rotation: "CCW",
+      throttleUpKey: "Digit3",
+      throttleDownKey: "Digit4"
+    }
+  ]
 };
 
 const automation: AutomationSettings = {
@@ -46,7 +139,10 @@ const hoverPilot: PilotInput = {
   roll: 0,
   pitch: 0,
   yaw: 0,
-  tiltRad: Math.PI / 2
+  flaps: 0,
+  tiltRad: Math.PI / 2,
+  propellerControl: "aircraft",
+  propellerThrottles: {}
 };
 
 describe("flight behavior program", () => {
@@ -187,6 +283,113 @@ describe("interactive flight physics", () => {
     );
     expect(state.phase).toBe("crashed");
     expect(state.rigidBody.positionNedM[2]).toBe(0);
+  });
+
+  it("does not invent roll control when no aileron-like surface exists", () => {
+    const noControlModel: FlightModel = {
+      ...model,
+      surfaces: model.surfaces.filter((surface) => surface.control === "none"),
+      propulsors: [],
+      maximumTotalThrustN: 0,
+      maximumPowerW: 0
+    };
+    const initial = createInitialFlightState(noControlModel, "cruise");
+    const next = stepInteractiveFlight(
+      noControlModel,
+      initial,
+      { ...hoverPilot, throttle: 0, roll: 1, tiltRad: 0 },
+      "manual",
+      automation,
+      [0, 0, 0],
+      0.02
+    );
+    expect(next.rigidBody.angularRateBodyRadS[0]).toBeCloseTo(0, 12);
+  });
+
+  it("creates roll only from the real left and right aileron forces", () => {
+    const initial = createInitialFlightState({ ...model, propulsors: [] }, "cruise");
+    const next = stepInteractiveFlight(
+      { ...model, propulsors: [], maximumTotalThrustN: 0, maximumPowerW: 0 },
+      initial,
+      { ...hoverPilot, throttle: 0, roll: 0.7, tiltRad: 0 },
+      "manual",
+      automation,
+      [0, 0, 0],
+      0.02
+    );
+    expect(Math.abs(next.rigidBody.angularRateBodyRadS[0])).toBeGreaterThan(0.0001);
+  });
+
+  it("turns uneven individual propeller power into an offset force moment", () => {
+    const initial = createInitialFlightState(model, "hover");
+    const next = stepInteractiveFlight(
+      model,
+      initial,
+      {
+        ...hoverPilot,
+        propellerControl: "individual",
+        propellerThrottles: { "left-propulsor": 1, "right-propulsor": 0 }
+      },
+      "manual",
+      automation,
+      [0, 0, 0],
+      0.02
+    );
+    expect(Math.abs(next.rigidBody.angularRateBodyRadS[0])).toBeGreaterThan(0.001);
+    expect(next.diagnostics.propulsorLoads.map((item) => item.throttle)).toEqual([1, 0]);
+  });
+
+  it("uses panel size and location for mesh-like pressure drag and moment", () => {
+    const initial = createInitialFlightState(model, "cruise");
+    const controls = { ...initial.appliedControls, throttle: 0, tiltRad: 0 };
+    const panel = {
+      componentId: "mesh-part",
+      name: "Uneven imported body",
+      positionBodyM: [0, 0.6, 0] as const,
+      normalBody: [1, 0, 0] as const,
+      areaM2: 0.5,
+      pressureCoefficient: 1,
+      skinFrictionCoefficient: 0,
+      source: "mesh" as const
+    };
+    const small = aerodynamicAndPropulsiveLoads(
+      { ...model, surfaces: [], propulsors: [], panels: [panel] },
+      initial,
+      controls,
+      [0, 0, 0]
+    );
+    const large = aerodynamicAndPropulsiveLoads(
+      { ...model, surfaces: [], propulsors: [], panels: [{ ...panel, areaM2: 1 }] },
+      initial,
+      controls,
+      [0, 0, 0]
+    );
+    expect(large.diagnostics.dragN).toBeCloseTo(small.diagnostics.dragN * 2, 10);
+    expect(Math.abs(small.momentBodyNm[2])).toBeGreaterThan(0);
+  });
+
+  it("uses the actual surrounding wind in every local air load", () => {
+    const initial = createInitialFlightState(model, "cruise");
+    const controls = { ...initial.appliedControls, throttle: 0, tiltRad: 0 };
+    const calm = aerodynamicAndPropulsiveLoads(
+      { ...model, propulsors: [] },
+      initial,
+      controls,
+      [0, 0, 0]
+    );
+    const tailwind = aerodynamicAndPropulsiveLoads(
+      { ...model, propulsors: [] },
+      initial,
+      controls,
+      [10, 0, 0]
+    );
+
+    expect(tailwind.diagnostics.airspeedMS).toBeGreaterThan(11.9);
+    expect(tailwind.diagnostics.airspeedMS).toBeLessThan(12.1);
+    expect(tailwind.diagnostics.dragN).toBeLessThan(calm.diagnostics.dragN);
+    expect(tailwind.diagnostics.surfaceLoads[0]?.dynamicPressurePa).toBeLessThan(
+      calm.diagnostics.surfaceLoads[0]?.dynamicPressurePa ?? 0
+    );
   });
 });
 

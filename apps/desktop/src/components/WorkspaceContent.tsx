@@ -1576,6 +1576,7 @@ function FlightWorkspace(props: WorkspaceContentProps) {
   return (
     <FlightLab
       project={props.project}
+      setProject={props.setProject}
       analysis={props.analysis}
       analysisOptions={props.analysisOptions}
       selectedId={props.selectedId}

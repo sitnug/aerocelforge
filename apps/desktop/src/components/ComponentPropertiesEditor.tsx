@@ -2,10 +2,13 @@ import type { AerocelProject, VehicleComponent } from "@aerocel/simulation-schem
 import { Gauge, Weight } from "lucide-react";
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react";
 import {
+  setComponentBehaviorValue,
   configuredMotorThrustN,
   setComponentEngineeringValue,
   type EngineeringPropertyKey
 } from "../lib/componentProperties";
+import { componentAerodynamicEnabled, defaultAerodynamicEnabled } from "../lib/aircraftPhysics";
+import { displayKeyboardCode, isPropellerBindingAllowed } from "../lib/flightInput";
 import { InfoTip } from "./InfoTip";
 
 interface NumberPropertyFieldProps {
@@ -110,6 +113,73 @@ function NumberPropertyField({
   );
 }
 
+function KeyBindingField({
+  label,
+  value,
+  help,
+  onCommit,
+  notify
+}: {
+  readonly label: string;
+  readonly value: string | null;
+  readonly help: string;
+  readonly onCommit: (value: string | null) => void;
+  readonly notify: (message: string) => void;
+}) {
+  const [capturing, setCapturing] = useState(false);
+  useEffect(() => {
+    if (!capturing) return;
+    const capture = (event: KeyboardEvent): void => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.code === "Escape") {
+        setCapturing(false);
+        return;
+      }
+      if (!isPropellerBindingAllowed(event.code)) {
+        notify(
+          "That key already controls the aircraft. Choose a number, arrow, or other unused key."
+        );
+        return;
+      }
+      onCommit(event.code);
+      setCapturing(false);
+    };
+    window.addEventListener("keydown", capture, true);
+    return () => window.removeEventListener("keydown", capture, true);
+  }, [capturing, notify, onCommit]);
+  return (
+    <div className="key-binding-field">
+      <span className="inline-help-label">
+        {label}
+        <InfoTip label={label} align="right">
+          {help}
+        </InfoTip>
+      </span>
+      <span>
+        <button
+          type="button"
+          className={capturing ? "is-capturing" : ""}
+          aria-label={`${label}: ${capturing ? "waiting for a key" : displayKeyboardCode(value)}`}
+          onClick={() => setCapturing(true)}
+        >
+          <kbd>{capturing ? "Press a key…" : displayKeyboardCode(value)}</kbd>
+        </button>
+        {value !== null && (
+          <button
+            type="button"
+            className="key-binding-clear"
+            aria-label={`Clear ${label.toLowerCase()}`}
+            onClick={() => onCommit(null)}
+          >
+            Clear
+          </button>
+        )}
+      </span>
+    </div>
+  );
+}
+
 interface ComponentPropertiesEditorProps {
   readonly component: VehicleComponent;
   readonly project: AerocelProject;
@@ -136,6 +206,16 @@ export function ComponentPropertiesEditor({
       setProject((current) => setComponentEngineeringValue(current, component.id, key, value));
     } catch (error: unknown) {
       notify(error instanceof Error ? error.message : "That property could not be changed.");
+    }
+  };
+  const commitBehavior = (
+    key: "aeroEnabled" | "throttleUpKey" | "throttleDownKey",
+    value: boolean | string | null
+  ): void => {
+    try {
+      setProject((current) => setComponentBehaviorValue(current, component.id, key, value));
+    } catch (error: unknown) {
+      notify(error instanceof Error ? error.message : "That setting could not be changed.");
     }
   };
   const fieldId = (name: string): string => `part-${component.id}-${name}`;
@@ -211,40 +291,68 @@ export function ComponentPropertiesEditor({
   );
 
   const propellerFields = component.type === "propeller" && (
-    <div className="engineering-fields">
-      <NumberPropertyField
-        id={fieldId("propeller-diameter")}
-        label="Propeller diameter"
-        value={propulsionUnit?.diameterM ?? propertyNumber("diameterM", 0.3)}
-        unit="m"
-        help="The full tip-to-tip size of the propeller. A larger propeller usually makes more thrust but needs more torque and clearance."
-        minimum={0.01}
-        step={0.01}
-        onCommit={(value) => commit("diameterM", value)}
-      />
-      <NumberPropertyField
-        id={fieldId("propeller-pitch")}
-        label="Propeller pitch"
-        value={propulsionUnit?.pitchM ?? propertyNumber("pitchM", 0.12)}
-        unit="m"
-        help="The ideal forward distance for one turn, like the pitch of a screw. More pitch can increase speed and motor load."
-        minimum={0.001}
-        step={0.01}
-        onCommit={(value) => commit("pitchM", value)}
-      />
-      <NumberPropertyField
-        id={fieldId("propeller-blades")}
-        label="Blade count"
-        value={propulsionUnit?.bladeCount ?? 2}
-        unit="blades"
-        help="How many blades are on this propeller. More blades can make more thrust in limited space, but usually reduce efficiency."
-        minimum={1}
-        maximum={12}
-        step={1}
-        integer
-        onCommit={(value) => commit("bladeCount", value)}
-      />
-    </div>
+    <>
+      <div className="engineering-fields">
+        <NumberPropertyField
+          id={fieldId("propeller-diameter")}
+          label="Propeller diameter"
+          value={propulsionUnit?.diameterM ?? propertyNumber("diameterM", 0.3)}
+          unit="m"
+          help="The full tip-to-tip size of the propeller. A larger propeller usually makes more thrust but needs more torque and clearance."
+          minimum={0.01}
+          step={0.01}
+          onCommit={(value) => commit("diameterM", value)}
+        />
+        <NumberPropertyField
+          id={fieldId("propeller-pitch")}
+          label="Propeller pitch"
+          value={propulsionUnit?.pitchM ?? propertyNumber("pitchM", 0.12)}
+          unit="m"
+          help="The ideal forward distance for one turn, like the pitch of a screw. More pitch can increase speed and motor load."
+          minimum={0.001}
+          step={0.01}
+          onCommit={(value) => commit("pitchM", value)}
+        />
+        <NumberPropertyField
+          id={fieldId("propeller-blades")}
+          label="Blade count"
+          value={propulsionUnit?.bladeCount ?? 2}
+          unit="blades"
+          help="How many blades are on this propeller. More blades can make more thrust in limited space, but usually reduce efficiency."
+          minimum={1}
+          maximum={12}
+          step={1}
+          integer
+          onCommit={(value) => commit("bladeCount", value)}
+        />
+      </div>
+      <div className="propeller-key-bindings">
+        <h4>Individual motor keys</h4>
+        <p>These keys change only this propeller when Fly is set to Individual propellers.</p>
+        <KeyBindingField
+          label="More power key"
+          value={
+            typeof component.properties.throttleUpKey === "string"
+              ? component.properties.throttleUpKey
+              : null
+          }
+          help="Hold this key to increase only this propeller's power. Aircraft control keys such as W, A, S, D, Shift, and Ctrl are kept separate."
+          onCommit={(value) => commitBehavior("throttleUpKey", value)}
+          notify={notify}
+        />
+        <KeyBindingField
+          label="Less power key"
+          value={
+            typeof component.properties.throttleDownKey === "string"
+              ? component.properties.throttleDownKey
+              : null
+          }
+          help="Hold this key to reduce only this propeller's power. Give every propeller its own pair of keys."
+          onCommit={(value) => commitBehavior("throttleDownKey", value)}
+          notify={notify}
+        />
+      </div>
+    </>
   );
 
   const batteryFields = component.type === "battery" && (
@@ -322,7 +430,20 @@ export function ComponentPropertiesEditor({
     </div>
   );
 
-  const wingFields = component.type === "wing" && (
+  const horizontalSurfaceTypes = [
+    "wing",
+    "horizontal_stabilizer",
+    "canard",
+    "control_surface",
+    "flap",
+    "aileron",
+    "elevator",
+    "elevon",
+    "flaperon",
+    "spoiler",
+    "air_brake"
+  ];
+  const wingFields = horizontalSurfaceTypes.includes(component.type) && (
     <div className="engineering-fields">
       <NumberPropertyField
         id={fieldId("wing-root-chord")}
@@ -367,6 +488,44 @@ export function ComponentPropertiesEditor({
           onCommit={(value) => commit("twistTipRad", (value * Math.PI) / 180)}
         />
       )}
+    </div>
+  );
+
+  const verticalSurfaceFields = ["vertical_stabilizer", "rudder"].includes(component.type) && (
+    <div className="engineering-fields">
+      <NumberPropertyField
+        id={fieldId("vertical-root-chord")}
+        label="Width at the body"
+        value={propertyNumber("rootChordM", component.geometry.boundingBoxM[0])}
+        unit="m"
+        help="The front-to-back width where this vertical surface joins the aircraft."
+        minimum={0.001}
+        step={0.01}
+        onCommit={(value) => commit("rootChordM", value)}
+      />
+      <NumberPropertyField
+        id={fieldId("vertical-tip-chord")}
+        label="Width at the tip"
+        value={propertyNumber("tipChordM", component.geometry.boundingBoxM[0] * 0.6)}
+        unit="m"
+        help="The front-to-back width at the top of this vertical surface."
+        minimum={0.001}
+        step={0.01}
+        onCommit={(value) => commit("tipChordM", value)}
+      />
+      <NumberPropertyField
+        id={fieldId("vertical-height")}
+        label="Surface height"
+        value={propertyNumber(
+          "heightM",
+          Math.max(component.geometry.boundingBoxM[2], component.geometry.boundingBoxM[1])
+        )}
+        unit="m"
+        help="The distance from the bottom of the fin or rudder to its top."
+        minimum={0.001}
+        step={0.01}
+        onCommit={(value) => commit("heightM", value)}
+      />
     </div>
   );
 
@@ -418,12 +577,160 @@ export function ComponentPropertiesEditor({
     </div>
   );
 
+  const internalTypes = [
+    "motor",
+    "propeller",
+    "rotor",
+    "tilt_mechanism",
+    "servo",
+    "battery",
+    "fuel_tank",
+    "esc",
+    "flight_controller",
+    "camera",
+    "lidar",
+    "gps",
+    "payload",
+    "ballast",
+    "parachute",
+    "generic_mass",
+    "collision_only",
+    "visual_only",
+    "cfd_excluded"
+  ];
+  const isLiftingSurface =
+    horizontalSurfaceTypes.includes(component.type) ||
+    ["vertical_stabilizer", "rudder"].includes(component.type);
+  const hasAirSettings =
+    component.geometry.kind === "mesh" ||
+    isLiftingSurface ||
+    (!internalTypes.includes(component.type) && defaultAerodynamicEnabled(component));
+  const airFields = hasAirSettings && (
+    <section className="inspector-section inspector-section--engineering air-reaction-settings">
+      <h3 className="heading-with-help">
+        Air reaction
+        <InfoTip label="Air reaction" align="right">
+          When this is on, Fly calculates air force on this part at its actual position. Turning it
+          off removes this part from the built-in flight air model.
+        </InfoTip>
+      </h3>
+      <label className="compact-toggle">
+        <input
+          type="checkbox"
+          checked={componentAerodynamicEnabled(component)}
+          onChange={(event) => commitBehavior("aeroEnabled", event.target.checked)}
+        />
+        Let air push on this part
+      </label>
+      {componentAerodynamicEnabled(component) && (
+        <div className="engineering-fields">
+          {isLiftingSurface ? (
+            <>
+              <NumberPropertyField
+                id={fieldId("air-base-drag")}
+                label="Clean drag"
+                value={propertyNumber("aeroBaseDragCoefficient", 0.022)}
+                unit="Cd"
+                help="How strongly this surface slows the aircraft before extra drag from making lift is added. Use airfoil data when available."
+                minimum={0}
+                maximum={2}
+                step={0.001}
+                onCommit={(value) => commit("aeroBaseDragCoefficient", value)}
+              />
+              <NumberPropertyField
+                id={fieldId("air-stall-angle")}
+                label="Stall angle"
+                value={(propertyNumber("aeroStallAngleRad", (15 * Math.PI) / 180) * 180) / Math.PI}
+                unit="°"
+                help="At about this airflow angle, smooth lift starts to break down. After it, the simulator reduces lift instead of holding an impossible constant value."
+                minimum={3}
+                maximum={45}
+                step={0.5}
+                onCommit={(value) => commit("aeroStallAngleRad", (value * Math.PI) / 180)}
+              />
+              {advancedMode && (
+                <>
+                  <NumberPropertyField
+                    id={fieldId("air-lift-slope")}
+                    label="Lift response"
+                    value={propertyNumber("aeroLiftSlopePerRad", 4.7)}
+                    unit="1/rad"
+                    help="How quickly lift grows as this part meets the air at a steeper angle. Use a measured or solver-derived value for reliable results."
+                    minimum={0.01}
+                    maximum={12}
+                    step={0.1}
+                    onCommit={(value) => commit("aeroLiftSlopePerRad", value)}
+                  />
+                  <NumberPropertyField
+                    id={fieldId("air-max-lift")}
+                    label="Maximum lift strength"
+                    value={propertyNumber("aeroMaximumLiftCoefficient", 1.35)}
+                    unit="Cl"
+                    help="The strongest lift coefficient allowed before the post-stall falloff."
+                    minimum={0.05}
+                    maximum={4}
+                    step={0.05}
+                    onCommit={(value) => commit("aeroMaximumLiftCoefficient", value)}
+                  />
+                  <NumberPropertyField
+                    id={fieldId("air-control-effect")}
+                    label="Full movement angle"
+                    value={
+                      (propertyNumber("aeroControlEffectivenessRad", (12 * Math.PI) / 180) * 180) /
+                      Math.PI
+                    }
+                    unit="°"
+                    help="How much this flap, aileron, elevator, or rudder changes its local airflow angle at full input. This only affects parts whose type is a movable control surface."
+                    minimum={0}
+                    maximum={45}
+                    step={0.5}
+                    onCommit={(value) =>
+                      commit("aeroControlEffectivenessRad", (value * Math.PI) / 180)
+                    }
+                  />
+                </>
+              )}
+            </>
+          ) : (
+            <>
+              <NumberPropertyField
+                id={fieldId("air-pressure")}
+                label="Pressure drag strength"
+                value={propertyNumber("aeroPressureCoefficient", 0.9)}
+                unit="Cp"
+                help="How strongly air pressure pushes on faces aimed into the airflow. Shape and mesh orientation change the resulting force and turning moment."
+                minimum={0}
+                maximum={3}
+                step={0.05}
+                onCommit={(value) => commit("aeroPressureCoefficient", value)}
+              />
+              {advancedMode && (
+                <NumberPropertyField
+                  id={fieldId("air-skin-friction")}
+                  label="Skin drag strength"
+                  value={propertyNumber("aeroSkinFrictionCoefficient", 0.005)}
+                  unit="Cf"
+                  help="A simple estimate of the air rubbing along the part. Surface finish and Reynolds number affect the real value."
+                  minimum={0}
+                  maximum={0.2}
+                  step={0.001}
+                  onCommit={(value) => commit("aeroSkinFrictionCoefficient", value)}
+                />
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+
   return (
     <>
       {(motorFields ||
         propellerFields ||
         batteryFields ||
         wingFields ||
+        verticalSurfaceFields ||
         fuselageFields ||
         poweredAccessoryFields) && (
         <section className="inspector-section inspector-section--engineering">
@@ -438,10 +745,12 @@ export function ComponentPropertiesEditor({
           {propellerFields}
           {batteryFields}
           {wingFields}
+          {verticalSurfaceFields}
           {fuselageFields}
           {poweredAccessoryFields}
         </section>
       )}
+      {airFields}
       <section className="inspector-section inspector-section--engineering">
         <h3 className="heading-with-help">
           Weight and appearance

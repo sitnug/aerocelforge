@@ -6,6 +6,16 @@ import {
   type RigidBodyInput,
   type SixDofState
 } from "@aerocel/flight-dynamics";
+import {
+  cross3,
+  dot3,
+  magnitude3,
+  normalize3,
+  scale3,
+  subtract3,
+  type Vector3
+} from "@aerocel/math-core";
+import type { AerodynamicPanel, AerodynamicSurface, FlightPropulsor } from "./aircraftPhysics";
 
 const GRAVITY_M_S2 = 9.80665;
 const DEG_TO_RAD = Math.PI / 180;
@@ -17,6 +27,7 @@ export type FlightPreset = "hover" | "cruise";
 export interface FlightModel {
   readonly massKg: number;
   readonly inertiaBodyKgM2: RigidBodyInput["inertiaBodyKgM2"];
+  readonly centerOfGravityBodyM: readonly [number, number, number];
   readonly densityKgM3: number;
   readonly wingAreaM2: number;
   readonly wingSpanM: number;
@@ -32,6 +43,9 @@ export interface FlightModel {
   readonly maximumPowerW: number;
   readonly batteryEnergyWh: number;
   readonly nominalVoltageV: number;
+  readonly surfaces: readonly AerodynamicSurface[];
+  readonly panels: readonly AerodynamicPanel[];
+  readonly propulsors: readonly FlightPropulsor[];
 }
 
 export interface PilotInput {
@@ -39,7 +53,10 @@ export interface PilotInput {
   readonly roll: number;
   readonly pitch: number;
   readonly yaw: number;
+  readonly flaps: number;
   readonly tiltRad: number;
+  readonly propellerControl: "aircraft" | "individual";
+  readonly propellerThrottles: Readonly<Record<string, number>>;
 }
 
 export interface FlightWaypoint {
@@ -86,6 +103,25 @@ export interface FlightStepDiagnostics {
   readonly powerW: number;
   readonly currentA: number;
   readonly loadFactor: number;
+  readonly surfaceLoads: readonly SurfaceLoadDiagnostic[];
+  readonly propulsorLoads: readonly PropulsorLoadDiagnostic[];
+}
+
+export interface SurfaceLoadDiagnostic {
+  readonly componentId: string;
+  readonly name: string;
+  readonly dynamicPressurePa: number;
+  readonly liftN: number;
+  readonly dragN: number;
+  readonly sideForceN: number;
+  readonly angleOfAttackRad: number;
+}
+
+export interface PropulsorLoadDiagnostic {
+  readonly id: string;
+  readonly name: string;
+  readonly throttle: number;
+  readonly thrustN: number;
 }
 
 export interface InteractiveFlightState {
@@ -249,7 +285,9 @@ const zeroDiagnostics: FlightStepDiagnostics = {
   thrustN: 0,
   powerW: 0,
   currentA: 0,
-  loadFactor: 1
+  loadFactor: 1,
+  surfaceLoads: [],
+  propulsorLoads: []
 };
 
 export function createInitialFlightState(
@@ -285,11 +323,16 @@ export function createInitialFlightState(
     activeWaypointIndex: 0,
     appliedControls: {
       throttle:
-        preset === "hover" ? (model.massKg * GRAVITY_M_S2) / model.maximumTotalThrustN : 0.42,
+        preset === "hover" && model.maximumTotalThrustN > 0
+          ? (model.massKg * GRAVITY_M_S2) / model.maximumTotalThrustN
+          : 0,
       roll: 0,
       pitch: 0,
       yaw: 0,
+      flaps: 0,
       tiltRad: preset === "hover" ? Math.PI / 2 : 0,
+      propellerControl: "aircraft",
+      propellerThrottles: {},
       source: "pilot"
     },
     diagnostics: zeroDiagnostics,
@@ -389,7 +432,10 @@ function resolveControls(
         roll: clamp(pilot.roll, -1, 1),
         pitch: clamp(pilot.pitch, -1, 1),
         yaw: clamp(pilot.yaw, -1, 1),
+        flaps: clamp(pilot.flaps, 0, 1),
         tiltRad: clamp(pilot.tiltRad, 0, Math.PI / 2),
+        propellerControl: pilot.propellerControl,
+        propellerThrottles: pilot.propellerThrottles,
         source: "pilot"
       },
       waypointIndex: state.activeWaypointIndex
@@ -413,7 +459,10 @@ function resolveControls(
           1
         ),
         yaw: clamp(pilot.yaw - state.rigidBody.angularRateBodyRadS[2] * 0.3, -1, 1),
+        flaps: clamp(pilot.flaps, 0, 1),
         tiltRad: clamp(pilot.tiltRad, 0, Math.PI / 2),
+        propellerControl: pilot.propellerControl,
+        propellerThrottles: pilot.propellerThrottles,
         source: "stability"
       },
       waypointIndex: state.activeWaypointIndex
@@ -445,7 +494,8 @@ function resolveControls(
           0,
           Math.PI / 2
         );
-  const hoverThrottle = (model.massKg * GRAVITY_M_S2) / model.maximumTotalThrustN;
+  const hoverThrottle =
+    model.maximumTotalThrustN > 0 ? (model.massKg * GRAVITY_M_S2) / model.maximumTotalThrustN : 0;
   const verticalSupport = Math.max(0.35, Math.sin(desiredTilt));
   const speedError = target.airspeedMS - groundSpeedMS;
   const throttle = target.landing
@@ -472,14 +522,101 @@ function resolveControls(
         1
       ),
       yaw: clamp(headingError * 0.6 - state.rigidBody.angularRateBodyRadS[2] * 0.35, -1, 1),
+      flaps: clamp(pilot.flaps, 0, 1),
       tiltRad: desiredTilt,
+      propellerControl: "aircraft",
+      propellerThrottles: {},
       source
     },
     waypointIndex: target.waypointIndex
   };
 }
 
-function aerodynamicAndPropulsiveLoads(
+const addVector = (left: Vector3, right: Vector3): [number, number, number] => [
+  left[0] + right[0],
+  left[1] + right[1],
+  left[2] + right[2]
+];
+
+function safeUnit(vector: Vector3): [number, number, number] {
+  return magnitude3(vector) <= 1e-9 ? [0, 0, 0] : normalize3(vector);
+}
+
+function localAirVelocity(
+  airVelocityBody: Vector3,
+  angularRateBodyRadS: Vector3,
+  positionBodyM: Vector3
+): [number, number, number] {
+  return addVector(airVelocityBody, cross3(angularRateBodyRadS, positionBodyM));
+}
+
+function postStallLiftCoefficient(angleOfAttackRad: number, surface: AerodynamicSurface): number {
+  const linear = surface.liftSlopePerRad * (angleOfAttackRad - surface.zeroLiftAngleRad);
+  const clippedLinear = clamp(
+    linear,
+    -surface.maximumLiftCoefficient,
+    surface.maximumLiftCoefficient
+  );
+  const absoluteAngle = Math.abs(angleOfAttackRad - surface.zeroLiftAngleRad);
+  if (absoluteAngle <= surface.stallAngleRad) return clippedLinear;
+  const liftAtStall = Math.min(
+    surface.maximumLiftCoefficient,
+    surface.liftSlopePerRad * surface.stallAngleRad
+  );
+  const decay = clamp(
+    1 - (absoluteAngle - surface.stallAngleRad) / (Math.PI / 2 - surface.stallAngleRad),
+    0.18,
+    1
+  );
+  return Math.sign(linear) * liftAtStall * decay;
+}
+
+function surfaceCommand(surface: AerodynamicSurface, controls: AppliedFlightControls): number {
+  if (surface.control === "roll") return controls.roll * surface.controlSign;
+  if (surface.control === "pitch") return controls.pitch * surface.controlSign;
+  if (surface.control === "yaw") return controls.yaw * surface.controlSign;
+  if (surface.control === "flap" || surface.control === "brake") return controls.flaps;
+  const sideSign = surface.positionBodyM[1] < 0 ? -1 : 1;
+  const rollSign = -sideSign;
+  const pitchSign = surface.positionBodyM[0] < 0 ? -1 : 1;
+  if (surface.control === "elevon") {
+    return clamp(controls.roll * rollSign + controls.pitch * pitchSign, -1, 1);
+  }
+  if (surface.control === "flaperon") {
+    return clamp(controls.roll * rollSign + controls.flaps, -1, 1);
+  }
+  return 0;
+}
+
+function propulsorThrottle(
+  propulsor: FlightPropulsor,
+  controls: AppliedFlightControls,
+  propulsors: readonly FlightPropulsor[]
+): number {
+  if (controls.propellerControl === "individual") {
+    return clamp(controls.propellerThrottles[propulsor.id] ?? 0, 0, 1);
+  }
+  const maximumLateralOffset = Math.max(
+    0.1,
+    ...propulsors.map((item) => Math.abs(item.positionBodyM[1]))
+  );
+  const maximumLongitudinalOffset = Math.max(
+    0.1,
+    ...propulsors.map((item) => Math.abs(item.positionBodyM[0]))
+  );
+  const rollMix =
+    -controls.roll *
+    (propulsor.positionBodyM[1] / maximumLateralOffset) *
+    Math.sin(controls.tiltRad);
+  const pitchMix =
+    controls.pitch *
+    (propulsor.positionBodyM[0] / maximumLongitudinalOffset) *
+    Math.sin(controls.tiltRad);
+  const yawMix = controls.yaw * (propulsor.rotation === "CW" ? -1 : 1) * 0.12;
+  return clamp(controls.throttle + rollMix * 0.22 + pitchMix * 0.22 + yawMix, 0, 1);
+}
+
+export function aerodynamicAndPropulsiveLoads(
   model: FlightModel,
   state: InteractiveFlightState,
   controls: AppliedFlightControls,
@@ -500,58 +637,152 @@ function aerodynamicAndPropulsiveLoads(
     airspeedMS > 0.25 ? Math.atan2(airVelocityBody[2], airVelocityBody[0]) : 0;
   const sideslipRad =
     airspeedMS > 0.25 ? Math.asin(clamp(airVelocityBody[1] / airspeedMS, -1, 1)) : 0;
-  const dynamicPressurePa = 0.5 * model.densityKgM3 * airspeedMS ** 2;
-  const unclippedLiftCoefficient =
-    model.liftSlopePerRad * (angleOfAttackRad - model.zeroLiftAngleRad);
-  const liftCoefficient = clamp(
-    unclippedLiftCoefficient,
-    model.minimumLiftCoefficient,
-    model.maximumLiftCoefficient
-  );
-  const dragCoefficient =
-    model.zeroLiftDragCoefficient + model.inducedDragFactor * liftCoefficient ** 2;
-  const sideForceCoefficient = model.sideForceSlopePerRad * sideslipRad + controls.yaw * 0.08;
-  const liftN = dynamicPressurePa * model.wingAreaM2 * liftCoefficient;
-  const dragN = dynamicPressurePa * model.wingAreaM2 * dragCoefficient;
-  const sideForceN = dynamicPressurePa * model.wingAreaM2 * sideForceCoefficient;
-  const cosineAlpha = Math.cos(angleOfAttackRad);
-  const sineAlpha = Math.sin(angleOfAttackRad);
-  const thrustN = controls.throttle * model.maximumTotalThrustN;
-  const thrustForwardN = thrustN * Math.cos(state.motorTiltRad);
-  const thrustUpN = thrustN * Math.sin(state.motorTiltRad);
-  const forceBodyN: RigidBodyInput["forceBodyN"] = [
-    thrustForwardN - dragN * cosineAlpha + liftN * sineAlpha,
-    sideForceN,
-    -thrustUpN - liftN * cosineAlpha - dragN * sineAlpha
-  ];
+  let forceBodyN: [number, number, number] = [0, 0, 0];
+  let momentBodyNm: [number, number, number] = [0, 0, 0];
+  let liftN = 0;
+  let dragN = 0;
+  let weightedLiftCoefficient = 0;
+  let weightedDragCoefficient = 0;
+  let coefficientAreaM2 = 0;
+  const surfaceLoads: SurfaceLoadDiagnostic[] = [];
 
-  const [rollRate, pitchRate, yawRate] = state.rigidBody.angularRateBodyRadS;
-  const rotorAuthority = Math.max(0.18, controls.throttle);
-  const rollMomentNm =
-    controls.roll * 3.2 * rotorAuthority +
-    dynamicPressurePa *
-      model.wingAreaM2 *
-      model.wingSpanM *
-      (controls.roll * 0.035 - sideslipRad * 0.045) -
-    rollRate * (0.7 + dynamicPressurePa * 0.006);
-  const pitchMomentNm =
-    controls.pitch * 2.8 * rotorAuthority +
-    dynamicPressurePa *
-      model.wingAreaM2 *
-      model.meanChordM *
-      (-0.42 * angleOfAttackRad + controls.pitch * 0.045) -
-    pitchRate * (0.65 + dynamicPressurePa * 0.004);
-  const yawMomentNm =
-    controls.yaw * 1.8 * rotorAuthority +
-    dynamicPressurePa *
-      model.wingAreaM2 *
-      model.wingSpanM *
-      (-0.08 * sideslipRad + controls.yaw * 0.018) -
-    yawRate * (0.45 + dynamicPressurePa * 0.003);
-  const powerW = model.maximumPowerW * controls.throttle ** 1.5;
+  for (const surface of model.surfaces) {
+    const momentArm = subtract3(surface.positionBodyM, model.centerOfGravityBodyM);
+    const localVelocity = localAirVelocity(
+      airVelocityBody,
+      state.rigidBody.angularRateBodyRadS,
+      momentArm
+    );
+    const localSpeed = magnitude3(localVelocity);
+    if (localSpeed <= 0.15) continue;
+    const localDirection = safeUnit(localVelocity);
+    const localDynamicPressurePa = 0.5 * model.densityKgM3 * localSpeed ** 2;
+    const chordSpeed = dot3(localVelocity, surface.chordDirectionBody);
+    const normalDirection = safeUnit(cross3(surface.chordDirectionBody, surface.spanDirectionBody));
+    const normalSpeed = dot3(localVelocity, normalDirection);
+    const geometricAngleRad = Math.atan2(normalSpeed, chordSpeed);
+    const command = surfaceCommand(surface, controls);
+    const effectiveAngleRad =
+      geometricAngleRad +
+      (surface.control === "brake" ? 0 : command * surface.controlEffectivenessRad);
+    const liftCoefficient =
+      postStallLiftCoefficient(effectiveAngleRad, surface) *
+      (surface.control === "brake" ? 1 - 0.75 * Math.abs(command) : 1);
+    const dragCoefficient =
+      surface.baseDragCoefficient +
+      surface.inducedDragFactor * liftCoefficient ** 2 +
+      (surface.control === "brake" ? 0.35 * Math.abs(command) : 0);
+    const surfaceLiftN = localDynamicPressurePa * surface.areaM2 * liftCoefficient;
+    const surfaceDragN = localDynamicPressurePa * surface.areaM2 * dragCoefficient;
+    const liftDirection = safeUnit(cross3(surface.spanDirectionBody, localDirection));
+    const surfaceForce = addVector(
+      scale3(liftDirection, surfaceLiftN),
+      scale3(localDirection, -surfaceDragN)
+    );
+    forceBodyN = addVector(forceBodyN, surfaceForce);
+    momentBodyNm = addVector(momentBodyNm, cross3(momentArm, surfaceForce));
+    const upwardLift = Math.max(0, -surfaceForce[2]);
+    const lateralForce = Math.abs(surfaceForce[1]);
+    liftN += upwardLift;
+    dragN += Math.max(0, -dot3(surfaceForce, localDirection));
+    weightedLiftCoefficient += liftCoefficient * surface.areaM2;
+    weightedDragCoefficient += dragCoefficient * surface.areaM2;
+    coefficientAreaM2 += surface.areaM2;
+    surfaceLoads.push({
+      componentId: surface.componentId,
+      name: surface.name,
+      dynamicPressurePa: localDynamicPressurePa,
+      liftN: upwardLift,
+      dragN: surfaceDragN,
+      sideForceN: lateralForce,
+      angleOfAttackRad: effectiveAngleRad
+    });
+  }
+
+  const panelLoads = new Map<string, SurfaceLoadDiagnostic>();
+  for (const panel of model.panels) {
+    const momentArm = subtract3(panel.positionBodyM, model.centerOfGravityBodyM);
+    const localVelocity = localAirVelocity(
+      airVelocityBody,
+      state.rigidBody.angularRateBodyRadS,
+      momentArm
+    );
+    const localSpeed = magnitude3(localVelocity);
+    if (localSpeed <= 0.15) continue;
+    const localDirection = safeUnit(localVelocity);
+    const alignment = dot3(localDirection, panel.normalBody);
+    const normalForceN =
+      alignment <= 0
+        ? 0
+        : 0.5 *
+          model.densityKgM3 *
+          localSpeed ** 2 *
+          panel.areaM2 *
+          panel.pressureCoefficient *
+          alignment ** 2;
+    const frictionForceN =
+      0.5 *
+      model.densityKgM3 *
+      localSpeed ** 2 *
+      panel.areaM2 *
+      panel.skinFrictionCoefficient *
+      (1 - Math.abs(alignment)) ** 2;
+    const panelForce = addVector(
+      scale3(panel.normalBody, -normalForceN),
+      scale3(localDirection, -frictionForceN)
+    );
+    forceBodyN = addVector(forceBodyN, panelForce);
+    momentBodyNm = addVector(momentBodyNm, cross3(momentArm, panelForce));
+    const panelDragN = Math.max(0, -dot3(panelForce, localDirection));
+    dragN += panelDragN;
+    liftN += Math.max(0, -panelForce[2]);
+    const previous = panelLoads.get(panel.componentId);
+    panelLoads.set(panel.componentId, {
+      componentId: panel.componentId,
+      name: panel.name,
+      dynamicPressurePa: 0.5 * model.densityKgM3 * localSpeed ** 2,
+      liftN: (previous?.liftN ?? 0) + Math.max(0, -panelForce[2]),
+      dragN: (previous?.dragN ?? 0) + panelDragN,
+      sideForceN: (previous?.sideForceN ?? 0) + Math.abs(panelForce[1]),
+      angleOfAttackRad: 0
+    });
+  }
+  surfaceLoads.push(...panelLoads.values());
+
+  let thrustN = 0;
+  let powerW = 0;
+  const propulsorLoads: PropulsorLoadDiagnostic[] = [];
+  for (const propulsor of model.propulsors) {
+    const momentArm = subtract3(propulsor.positionBodyM, model.centerOfGravityBodyM);
+    const throttle = propulsorThrottle(propulsor, controls, model.propulsors);
+    const tiltedAxis = safeUnit([
+      propulsor.axisBody[0] * Math.cos(state.motorTiltRad) -
+        propulsor.axisBody[2] * Math.sin(state.motorTiltRad),
+      propulsor.axisBody[1],
+      propulsor.axisBody[0] * -Math.sin(state.motorTiltRad) +
+        propulsor.axisBody[2] * Math.cos(state.motorTiltRad)
+    ]);
+    const unitThrustN = throttle * propulsor.maximumThrustN;
+    const thrustForce = scale3(tiltedAxis, unitThrustN);
+    const offsetMoment = cross3(momentArm, thrustForce);
+    const reactionTorqueNm =
+      unitThrustN * propulsor.diameterM * 0.018 * (propulsor.rotation === "CW" ? -1 : 1);
+    forceBodyN = addVector(forceBodyN, thrustForce);
+    momentBodyNm = addVector(
+      momentBodyNm,
+      addVector(offsetMoment, scale3(tiltedAxis, reactionTorqueNm))
+    );
+    thrustN += unitThrustN;
+    powerW += propulsor.maximumPowerW * throttle ** 1.5;
+    propulsorLoads.push({ id: propulsor.id, name: propulsor.name, throttle, thrustN: unitThrustN });
+  }
+  powerW = Math.min(powerW, model.maximumPowerW);
+
+  const liftCoefficient = coefficientAreaM2 > 0 ? weightedLiftCoefficient / coefficientAreaM2 : 0;
+  const dragCoefficient = coefficientAreaM2 > 0 ? weightedDragCoefficient / coefficientAreaM2 : 0;
   return {
     forceBodyN,
-    momentBodyNm: [rollMomentNm, pitchMomentNm, yawMomentNm],
+    momentBodyNm,
     diagnostics: {
       airspeedMS,
       angleOfAttackRad,
@@ -563,7 +794,9 @@ function aerodynamicAndPropulsiveLoads(
       thrustN,
       powerW,
       currentA: powerW / model.nominalVoltageV,
-      loadFactor: Math.hypot(forceBodyN[1], forceBodyN[2]) / (model.massKg * GRAVITY_M_S2)
+      loadFactor: Math.hypot(forceBodyN[1], forceBodyN[2]) / (model.massKg * GRAVITY_M_S2),
+      surfaceLoads,
+      propulsorLoads
     }
   };
 }

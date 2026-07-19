@@ -5,6 +5,22 @@ A1 model is a deterministic attached-flow, parabolic-polar estimate. It is usefu
 for preliminary comparisons, but it is not a substitute for airfoil data,
 VLM/panel analysis, CFD, a wind tunnel, or flight-test identification.
 
+The interactive Fly workspace has a separate local-flow model. It applies lift,
+drag, and pressure forces to individual parts at their actual position relative
+to the centre of gravity. Lifting parts use their own area, chord, span,
+orientation, lift slope, stall angle, lift limit, and drag inputs. Imported
+non-lifting meshes use sampled triangle area, centroid, and normal; procedural
+bodies use oriented bounding-box faces. Wind and aircraft angular rate change
+the local velocity at each part. The resulting `r × F` moment changes the 6-DOF
+state. Pilot inputs do not add direct moments: only matching aileron/elevon,
+elevator/canard, rudder, flap/brake, or physically offset propeller forces can
+control the vehicle.
+
+This live calculation is a quasi-steady reduced-order pressure/panel model, not
+an OpenFOAM/SU2 CFD solve or a replacement for VSPAERO. It makes size, shape,
+orientation, asymmetry, wind, and placement matter during interactive flight,
+but its coefficients still need calibration.
+
 ## Equations implemented
 
 At each operating point the model uses the U.S. Standard Atmosphere 1976
@@ -34,9 +50,10 @@ justified excrescence, cooling, landing-gear, trim, roughness, or other effects.
 A1 does not independently calculate wetted-area skin friction, component form
 factors, interference factors, transition location, surface roughness, cooling
 flow, landing-gear drag, trim drag, wave drag, separated flow, dynamic stall,
-rotor-wake interaction, or ground effect. Imported mesh shape does not
-automatically become an aerodynamic database. Those effects require geometry and
-flow-specific evidence.
+rotor-wake interaction, or ground effect. Imported mesh shape contributes face
+area, direction, pressure drag, and local moment in Fly, but it does not
+automatically become a validated aerodynamic database. Those effects require
+geometry and flow-specific evidence.
 
 The result emits warnings when:
 

@@ -44,8 +44,9 @@ linked joints and propulsion setup. It will not let a project lose its last part
 You can also click any part in the left navigator to go straight to its editor.
 The **How this part works** section changes with the selected part. It provides
 plain-language controls for motor thrust, power, current and KV; propeller size,
-pitch and blades; battery configuration; wing and body dimensions; accessory
-power; and part weight. A motor's **Maximum thrust** is the user-entered limit for
+pitch, blades, and individual keys; battery configuration; wing, tail, movable
+surface, and body dimensions; per-part air reaction; accessory power; and part
+weight. A motor's **Maximum thrust** is the user-entered limit for
 that motor-and-propeller unit and is used by the flight simulator. Use measured
 thrust-stand data when available; the nearby propeller value is only an estimate.
 
@@ -88,10 +89,15 @@ calibration workflow.
 Open **Fly** to control the currently loaded vehicle in the interactive Flight
 Lab. Choose a hover or cruise start, select Manual, Stabilize, Altitude hold, or
 Return home, then choose **Controller** or **Keyboard**. Controller mode accepts
-the Mode 2 on-screen sticks or a standard gamepad. In Keyboard mode, W pitches
-down, S pitches up, A banks left, D banks right, Shift raises throttle, and Ctrl
-lowers throttle. Q/E changes motor tilt and Space starts or pauses the fixed-step
-simulation. Live telemetry includes
+the Mode 2 on-screen sticks or a standard gamepad. In Keyboard mode, W moves a
+real elevator/elevon/canard for nose-down, S moves it for nose-up, A/D moves real
+aileron/elevon/flaperon parts, and Z/X moves a real rudder. If a matching movable
+part is absent, that axis does nothing. Shift/Ctrl changes combined throttle,
+Q/E changes motor tilt, and Space starts or pauses the fixed-step simulation.
+Choose **Individual propellers** to give each propeller its own increase/decrease
+keys and power setting. Powered Fly remains locked without a usable propeller
+setup and charged battery; the separate glide test keeps all motors at zero.
+Live telemetry includes
 attitude, airspeed, altitude, wind-relative aerodynamic state, forces, power,
 position, trail, and battery use.
 
@@ -106,10 +112,13 @@ disable arming; arbitrary code is never executed. See
 [FLIGHT_SIMULATOR.md](FLIGHT_SIMULATOR.md) for the complete controls, syntax,
 limits, and validation boundary.
 
-Flight uses quaternion nonlinear 6-DOF rigid-body dynamics. The interactive loads
-are concept-level A1 aerodynamics and simplified control moments, so the workspace
-must not be treated as a calibrated digital twin. Trim failure is an engineering
-result, not a UI error. Transition uses independent tilt schedules, rotor-wing
+Flight uses quaternion nonlinear 6-DOF rigid-body dynamics. Interactive loads are
+calculated at each enabled part from local wind, aircraft rotation, size,
+orientation, position relative to the centre of gravity, stall/drag inputs, and
+actual control-surface deflection. Imported meshes contribute triangle-derived
+pressure panels. This is responsive reduced-order physics, not CFD or a calibrated
+digital twin. Trim failure is an engineering result, not a UI error. Transition
+uses independent tilt schedules, rotor-wing
 interaction approximation, battery power, altitude loss, and failure checks. Run
 the one-motor-out case to see an intentionally failed safety case.
 
