@@ -105,11 +105,15 @@ command changes only matching movable surfaces. Its force creates a moment with
 `r × F`; no fixed roll, pitch, or yaw moment is added for a key press.
 
 Non-lifting procedural bodies use six oriented bounding-box pressure faces.
-Imported non-lifting meshes use a bounded set of triangle-derived pressure
-panels. Triangle scale, area, normal, centroid, component rotation, and component
-position therefore change pressure drag, side force, and moment. A missing mesh
-asset falls back to bounding-box panels. The advanced live table shows the
-strongest local pressure, lift, and drag loads by part.
+Every imported aerodynamic mesh uses a bounded set of triangle-derived surface
+panels, even when the part is not named as a wing or given an airfoil. Triangle
+scale, area, normal, centroid, component rotation, component position, local wind,
+and aircraft angular rate change lift, drag, side force, and moment. Open surfaces
+react from either side. Closed surfaces use paired-face scaling plus windward
+pressure. Imported ailerons, elevators, rudders, flaps, elevons, and flaperons
+rotate their panel normals when commanded. A missing mesh asset falls back to
+bounding-box panels. The advanced live table shows the strongest local pressure,
+lift, and drag loads by part.
 
 Each propeller produces thrust at its own position and along its configured axis.
 The model includes offset moment and opposite CW/CCW reaction torque, shared
@@ -118,7 +122,8 @@ detection. If the selected propulsion setup cannot produce vehicle weight, the
 UI reports that hover is not sustainable instead of fabricating extra thrust.
 
 The live panel model is quasi-steady and geometry-responsive; it is not CFD and
-cannot infer exact real-world coefficients from an STL. Stall/spin history,
+cannot infer exact real-world coefficients from an STL. It does not require an
+airfoil identity, but that does not make it a Navier–Stokes solution. Stall/spin history,
 boundary layers, Reynolds-dependent separation, rotor/airframe interference,
 motor and actuator dynamics, terrain, ground effect, controller latency,
 multidimensional coefficient tables, and hardware timing are not calibrated.

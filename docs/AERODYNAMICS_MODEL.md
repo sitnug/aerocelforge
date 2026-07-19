@@ -7,15 +7,22 @@ for airfoil data, VLM/panel analysis, CFD, a wind tunnel, or flight-test
 identification.
 
 The interactive Fly workspace has a separate local-flow model. It applies lift,
-drag, and pressure forces to individual parts at their actual position relative
-to the centre of gravity. Lifting parts use their own area, chord, span,
-orientation, lift slope, stall angle, lift limit, and drag inputs. Imported
-non-lifting meshes use sampled triangle area, centroid, and normal; procedural
-bodies use oriented bounding-box faces. Wind and aircraft angular rate change
-the local velocity at each part. The resulting `r × F` moment changes the 6-DOF
-state. Pilot inputs do not add direct moments: only matching aileron/elevon,
-elevator/canard, rudder, flap/brake, or physically offset propeller forces can
-control the vehicle.
+drag, side force, and pressure to individual parts at their actual position
+relative to the centre of gravity. Every imported aerodynamic mesh uses its
+sampled triangle area, centroid, normal, component scale, and rotation. It does
+not need an airfoil name. Closed shells receive windward pressure, all faces
+receive tangential skin friction, and faces at an angle to the local flow receive
+a bounded normal reaction. Open surfaces react from either side, so reversed
+triangle winding does not turn the air force off. Wind and aircraft angular rate
+change the local velocity at each panel. The resulting `r × F` moment changes the
+6-DOF state.
+
+Imported parts marked as aileron, elevon, flaperon, elevator, rudder, flap, or
+brake rotate their panel normals around the part control axis. Pilot inputs do
+not add direct moments: only those deflected panels, procedural control surfaces,
+or physically offset propeller forces can control the vehicle. Procedural
+lifting parts retain the configured reduced-order lift model because they do not
+contain a triangle surface to sample.
 
 This live calculation is a quasi-steady reduced-order pressure/panel model, not
 an OpenFOAM/SU2 CFD solve or a replacement for VSPAERO. It makes size, shape,
@@ -46,21 +53,26 @@ The UI displays every drag term rather than only the total. A1 derives its base
 drag from each enabled part. Lifting surfaces contribute their individual
 profile-drag coefficient and actual area. Imported meshes contribute sampled
 triangle normals and areas; procedural bodies use oriented bounding-box panels.
-Windward pressure and tangential skin-friction forces are reduced to `CD` using
-the project wing reference area. `CD_add` is an explicit user-controlled
+Windward pressure, bounded surface-normal reaction, and tangential skin-friction
+forces are reduced to `CD` using the project wing reference area. When a project
+contains imported aerodynamic panels and no procedural lifting surfaces, the
+displayed quick lift curve, drag curve, and pitch moment come from those panels
+instead of the generic A1 wing curve. `CD_add` is an explicit user-controlled
 increment in drag counts (`1 count = 0.0001 CD`) for measured or justified
 excrescence, cooling, landing-gear, trim, roughness, or other effects.
 
 ## What A1 does not derive
 
-A1 estimates wetted-panel skin friction and windward form pressure, but it does
+A1 estimates wetted-panel skin friction, windward form pressure, and a bounded
+geometry-normal reaction, but it does
 not solve a boundary layer or independently calculate transition location,
 Reynolds-dependent roughness, component interference, cooling flow, landing-gear
-drag, trim drag, wave drag, separated flow, dynamic stall, rotor-wake
+drag, trim drag, wave drag, a solved pressure field, separated flow, dynamic stall, rotor-wake
 interaction, or ground effect. Imported mesh shape contributes face area,
 direction, pressure drag, and local moment in both A1 and Fly, but it does not
-automatically become a validated aerodynamic database. Those effects require
-geometry and flow-specific evidence.
+automatically become a validated aerodynamic database. The local normal-reaction
+closure is not a vortex-lattice, panel-potential, Navier–Stokes, or turbulence
+solve. Those effects require geometry and flow-specific evidence.
 
 The result emits warnings when:
 
@@ -86,6 +98,9 @@ Automated tests check:
 - blunt-body pressure drag exceeds slender-body pressure drag for the same
   reference area;
 - imported body-panel drag force is included in the reported Fly `CD`;
+- an unnamed imported surface produces positive and negative lift from opposite
+  wind angles without an airfoil lookup;
+- imported control-surface panels deflect and create force and moment;
 - added drag counts propagate through design-point, trim, glide, transition, and
   optimization calculations;
 - positive and negative stall margins use the nearest configured boundary;

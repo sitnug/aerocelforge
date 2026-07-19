@@ -41,7 +41,24 @@ export interface AerodynamicPanel {
   readonly areaM2: number;
   readonly pressureCoefficient: number;
   readonly skinFrictionCoefficient: number;
+  readonly attachedFlowSlopePerRad: number;
+  readonly maximumAttachedFlowCoefficient: number;
+  readonly flowModel: "closed_shell" | "two_sided_surface";
+  readonly control: AerodynamicSurface["control"];
+  readonly controlSign: number;
+  readonly controlEffectivenessRad: number;
+  readonly controlAxisBody: FlightVector;
   readonly source: "mesh" | "bounding_box";
+}
+
+export interface AerodynamicPanelLoad {
+  readonly forceBodyN: FlightVector;
+  readonly dynamicPressurePa: number;
+  readonly pressureForceN: number;
+  readonly attachedFlowForceN: number;
+  readonly frictionForceN: number;
+  readonly incidenceAngleRad: number;
+  readonly normalBody: FlightVector;
 }
 
 export interface FlightPropulsor {
@@ -72,9 +89,19 @@ export interface GeometryDragEstimate {
   readonly wettedPanelAreaM2: number;
   readonly surfaceProfileCoefficient: number;
   readonly pressureCoefficient: number;
+  readonly attachedFlowCoefficient: number;
   readonly skinFrictionCoefficient: number;
   readonly totalBaseCoefficient: number;
   readonly equivalentDragAreaM2: number;
+}
+
+export interface GeometryAerodynamicEstimate {
+  readonly liftCoefficient: number;
+  readonly dragCoefficient: number;
+  readonly sideForceCoefficient: number;
+  readonly rollMomentCoefficient: number;
+  readonly pitchMomentCoefficient: number;
+  readonly yawMomentCoefficient: number;
 }
 
 const LIFTING_TYPES = new Set<ComponentType>([
@@ -119,6 +146,9 @@ const finiteProperty = (component: VehicleComponent, key: string, fallback: numb
   const value = Number(component.properties[key]);
   return Number.isFinite(value) ? value : fallback;
 };
+
+const clamp = (value: number, minimum: number, maximum: number): number =>
+  Math.max(minimum, Math.min(maximum, value));
 
 const stringProperty = (component: VehicleComponent, key: string): string | null => {
   const value = component.properties[key];
@@ -196,6 +226,103 @@ function liftingControl(component: VehicleComponent): AerodynamicSurface["contro
     return "pitch";
   }
   return "none";
+}
+
+function panelControlAxis(component: VehicleComponent): FlightVector {
+  return rotateEuler(
+    VERTICAL_TYPES.has(component.type) ? [0, 0, 1] : [0, 1, 0],
+    component.transform.rotationRad
+  );
+}
+
+function rotateAroundAxis(vector: Vector3, axis: Vector3, angleRad: number): FlightVector {
+  if (Math.abs(angleRad) <= 1e-12 || magnitude3(axis) <= 1e-12) return [...vector];
+  const unitAxis = normalize3(axis);
+  const cosine = Math.cos(angleRad);
+  const sine = Math.sin(angleRad);
+  const parallel = scale3(unitAxis, dot3(unitAxis, vector) * (1 - cosine));
+  const rotated = add(
+    add(scale3(vector, cosine), scale3(cross3(unitAxis, vector), sine)),
+    parallel
+  );
+  return normalize3(rotated);
+}
+
+/**
+ * Calculates a local load from the triangle orientation and local relative wind.
+ *
+ * This is a geometry-first reduced-order surface model: closed shells receive
+ * windward pressure, every surface receives tangential skin friction, and thin
+ * or paired shell faces receive a bounded attached-flow normal reaction. It
+ * does not require an airfoil name or coefficient table and does not pretend to
+ * resolve a CFD flow field.
+ */
+export function aerodynamicPanelLoad(
+  panel: AerodynamicPanel,
+  airVelocityBodyMS: Vector3,
+  densityKgM3: number,
+  controlCommand = 0
+): AerodynamicPanelLoad {
+  const speedMS = magnitude3(airVelocityBodyMS);
+  const dynamicPressurePa = 0.5 * densityKgM3 * speedMS ** 2;
+  const deflectionRad = clamp(controlCommand, -1, 1) * panel.controlEffectivenessRad;
+  const normalBody = rotateAroundAxis(
+    normalize3(panel.normalBody),
+    panel.controlAxisBody,
+    deflectionRad
+  );
+  if (speedMS <= 1e-9 || dynamicPressurePa <= 0 || panel.areaM2 <= 0) {
+    return {
+      forceBodyN: [0, 0, 0],
+      dynamicPressurePa,
+      pressureForceN: 0,
+      attachedFlowForceN: 0,
+      frictionForceN: 0,
+      incidenceAngleRad: 0,
+      normalBody
+    };
+  }
+
+  const flowDirection = scale3(airVelocityBodyMS, 1 / speedMS);
+  const signedAlignment = clamp(dot3(flowDirection, normalBody), -1, 1);
+  const absoluteAlignment = Math.abs(signedAlignment);
+  const tangentVector = subtract3(flowDirection, scale3(normalBody, signedAlignment));
+  const tangentFraction = magnitude3(tangentVector);
+  const tangentDirection =
+    tangentFraction <= 1e-9 ? ([0, 0, 0] as const) : scale3(tangentVector, 1 / tangentFraction);
+  const pressureAlignment =
+    panel.flowModel === "closed_shell" ? Math.max(0, signedAlignment) : absoluteAlignment;
+  const pressureForceN =
+    dynamicPressurePa * panel.areaM2 * panel.pressureCoefficient * pressureAlignment ** 2;
+  const pressureDirection =
+    panel.flowModel === "closed_shell"
+      ? scale3(normalBody, -1)
+      : scale3(normalBody, signedAlignment < 0 ? 1 : -1);
+
+  const incidenceAngleRad = Math.asin(absoluteAlignment);
+  const attachedCoefficient = Math.min(
+    panel.maximumAttachedFlowCoefficient,
+    panel.attachedFlowSlopePerRad * incidenceAngleRad * tangentFraction
+  );
+  const shellPairScale = panel.flowModel === "closed_shell" ? 0.5 : 1;
+  const attachedFlowForceN =
+    dynamicPressurePa * panel.areaM2 * attachedCoefficient * shellPairScale;
+  const attachedDirection = scale3(normalBody, signedAlignment < 0 ? 1 : -1);
+
+  const frictionForceN =
+    dynamicPressurePa * panel.areaM2 * panel.skinFrictionCoefficient * tangentFraction ** 2;
+  return {
+    forceBodyN: add(
+      add(scale3(pressureDirection, pressureForceN), scale3(attachedDirection, attachedFlowForceN)),
+      scale3(tangentDirection, -frictionForceN)
+    ),
+    dynamicPressurePa,
+    pressureForceN,
+    attachedFlowForceN,
+    frictionForceN,
+    incidenceAngleRad: Math.sign(signedAlignment) * incidenceAngleRad,
+    normalBody
+  };
 }
 
 function surfaceFromComponent(
@@ -298,6 +425,19 @@ function fallbackPanels(component: VehicleComponent): readonly AerodynamicPanel[
     0,
     finiteProperty(component, "aeroSkinFrictionCoefficient", 0.006)
   );
+  const control =
+    VERTICAL_TYPES.has(component.type) && component.type === "rudder"
+      ? "yaw"
+      : liftingControl(component);
+  const sideSign = component.transform.translationM[1] < 0 ? -1 : 1;
+  const controlSign =
+    control === "roll"
+      ? -sideSign
+      : control === "pitch" || control === "yaw"
+        ? component.transform.translationM[0] < 0
+          ? -1
+          : 1
+        : 1;
   return definitions
     .filter(([, , areaM2]) => areaM2 > 1e-8)
     .map(([point, normal, areaM2]) => ({
@@ -308,8 +448,45 @@ function fallbackPanels(component: VehicleComponent): readonly AerodynamicPanel[
       areaM2,
       pressureCoefficient,
       skinFrictionCoefficient,
+      attachedFlowSlopePerRad: 2 * Math.PI,
+      maximumAttachedFlowCoefficient: 1.4,
+      flowModel: "closed_shell" as const,
+      control,
+      controlSign,
+      controlEffectivenessRad: Math.max(
+        0,
+        finiteProperty(component, "aeroControlEffectivenessRad", (12 * Math.PI) / 180)
+      ),
+      controlAxisBody: panelControlAxis(component),
       source: "bounding_box" as const
     }));
+}
+
+function meshIsWatertight(mesh: TriangleMesh): boolean {
+  let extent = 1;
+  for (const vertex of mesh.vertices) {
+    extent = Math.max(extent, Math.abs(vertex[0]), Math.abs(vertex[1]), Math.abs(vertex[2]));
+  }
+  const tolerance = extent * 1e-8;
+  const vertexKeys = mesh.vertices.map((vertex) =>
+    vertex.map((value) => Math.round(value / tolerance)).join(",")
+  );
+  const edgeCounts = new Map<string, number>();
+  for (const face of mesh.faces) {
+    for (const [left, right] of [
+      [face[0], face[1]],
+      [face[1], face[2]],
+      [face[2], face[0]]
+    ] as const) {
+      const ends = [
+        vertexKeys[left] ?? `missing:${left}`,
+        vertexKeys[right] ?? `missing:${right}`
+      ].sort();
+      const key = `${ends[0]}:${ends[1]}`;
+      edgeCounts.set(key, (edgeCounts.get(key) ?? 0) + 1);
+    }
+  }
+  return edgeCounts.size > 0 && [...edgeCounts.values()].every((count) => count === 2);
 }
 
 function meshPanels(
@@ -340,13 +517,27 @@ function meshPanels(
     0,
     finiteProperty(component, "aeroSkinFrictionCoefficient", 0.005)
   );
+  const flowModel = meshIsWatertight(mesh) ? "closed_shell" : "two_sided_surface";
+  const surface = surfaceFromComponent(component, 2 * Math.PI);
+  const control = surface?.control ?? "none";
+  const controlSign = surface?.controlSign ?? 1;
   interface PanelBin {
     areaM2: number;
     weightedPosition: FlightVector;
     weightedNormal: FlightVector;
   }
-  const elevationBins = Math.max(2, Math.floor(Math.sqrt(maximumPanels / 2)));
-  const azimuthBins = Math.max(1, Math.floor(maximumPanels / elevationBins));
+  const spatialBinsPerAxis = maximumPanels >= 108 ? 3 : 2;
+  const spatialBinCount = spatialBinsPerAxis ** 3;
+  const elevationBins = Math.max(2, Math.floor(Math.sqrt(maximumPanels / spatialBinCount / 2)));
+  const azimuthBins = Math.max(1, Math.floor(maximumPanels / spatialBinCount / elevationBins));
+  const spatialBin = (value: number, axis: 0 | 1 | 2): number => {
+    const range = maximum[axis] - minimum[axis];
+    if (range <= 1e-12) return 0;
+    return Math.min(
+      spatialBinsPerAxis - 1,
+      Math.floor(((value - minimum[axis]) / range) * spatialBinsPerAxis)
+    );
+  };
   const bins = new Map<string, PanelBin>();
   for (const face of mesh.faces) {
     const a = mesh.vertices[face[0]];
@@ -377,7 +568,10 @@ function meshPanels(
       elevationBins - 1,
       Math.floor(((elevation + Math.PI / 2) / Math.PI) * elevationBins)
     );
-    const key = `${azimuthIndex}:${elevationIndex}`;
+    const key = `${spatialBin(centroid[0], 0)}:${spatialBin(centroid[1], 1)}:${spatialBin(
+      centroid[2],
+      2
+    )}:${azimuthIndex}:${elevationIndex}`;
     const bin = bins.get(key) ?? {
       areaM2: 0,
       weightedPosition: [0, 0, 0],
@@ -405,6 +599,19 @@ function meshPanels(
         areaM2: bin.areaM2,
         pressureCoefficient,
         skinFrictionCoefficient,
+        attachedFlowSlopePerRad: 2 * Math.PI,
+        maximumAttachedFlowCoefficient: Math.max(
+          0.05,
+          finiteProperty(component, "aeroMaximumLiftCoefficient", 1.4)
+        ),
+        flowModel,
+        control,
+        controlSign,
+        controlEffectivenessRad: Math.max(
+          0,
+          finiteProperty(component, "aeroControlEffectivenessRad", (12 * Math.PI) / 180)
+        ),
+        controlAxisBody: panelControlAxis(component),
         source: "mesh"
       }
     ];
@@ -426,8 +633,7 @@ export function deriveAircraftPhysics(
     (component) =>
       componentAerodynamicEnabled(component) &&
       component.geometry.kind === "mesh" &&
-      !LIFTING_TYPES.has(component.type) &&
-      !VERTICAL_TYPES.has(component.type)
+      !INTERNAL_TYPES.has(component.type)
   );
   const panelsPerMesh = Math.max(
     24,
@@ -437,23 +643,25 @@ export function deriveAircraftPhysics(
   for (const component of project.vehicle.components) {
     if (!componentAerodynamicEnabled(component)) continue;
     const surface = surfaceFromComponent(component, defaultLiftSlopePerRad);
+    if (INTERNAL_TYPES.has(component.type)) continue;
+    const sha = component.geometry.sourceSha256;
+    const mesh = sha === null ? undefined : geometryAssets.get(sha);
+    if (component.geometry.kind === "mesh" && mesh !== undefined) {
+      const componentPanels = meshPanels(component, mesh, panelsPerMesh);
+      panels.push(...componentPanels);
+      meshPanelCount += componentPanels.length;
+      continue;
+    }
     if (surface !== null) {
       rawSurfaces.push(surface);
       continue;
     }
-    if (INTERNAL_TYPES.has(component.type)) continue;
-    const sha = component.geometry.sourceSha256;
-    const mesh = sha === null ? undefined : geometryAssets.get(sha);
     const componentPanels =
       component.geometry.kind === "mesh" && mesh !== undefined
         ? meshPanels(component, mesh, panelsPerMesh)
         : fallbackPanels(component);
     panels.push(...componentPanels);
-    if (component.geometry.kind === "mesh" && mesh !== undefined) {
-      meshPanelCount += componentPanels.length;
-    } else {
-      fallbackPanelCount += componentPanels.length;
-    }
+    fallbackPanelCount += componentPanels.length;
   }
 
   const childSurfaceAreaByParent = new Map<string, number>();
@@ -507,6 +715,46 @@ export function vectorProjectionArea(panel: AerodynamicPanel, velocityBodyMS: Ve
   return panel.areaM2 * Math.abs(dot3(panel.normalBody, scale3(velocityBodyMS, 1 / speed)));
 }
 
+export function estimateGeometryAerodynamicLoads(
+  panels: readonly AerodynamicPanel[],
+  referenceAreaM2: number,
+  referenceSpanM: number,
+  referenceChordM: number,
+  centerOfGravityBodyM: Vector3,
+  flowDirectionBody: Vector3
+): GeometryAerodynamicEstimate {
+  if (referenceAreaM2 <= 0 || referenceSpanM <= 0 || referenceChordM <= 0) {
+    throw new Error("Aerodynamic reference area, span, and chord must be positive");
+  }
+  const flowSpeed = magnitude3(flowDirectionBody);
+  if (flowSpeed <= 1e-9) throw new Error("Aerodynamic flow direction must be non-zero");
+  const direction = scale3(flowDirectionBody, 1 / flowSpeed);
+  let forceBody: FlightVector = [0, 0, 0];
+  let momentBody: FlightVector = [0, 0, 0];
+  for (const panel of panels) {
+    // density=2 and speed=1 makes dynamic pressure exactly 1 Pa, so the
+    // accumulated force is force area and converts directly to coefficients.
+    const load = aerodynamicPanelLoad(panel, direction, 2);
+    forceBody = add(forceBody, load.forceBodyN);
+    momentBody = add(
+      momentBody,
+      cross3(subtract3(panel.positionBodyM, centerOfGravityBodyM), load.forceBodyN)
+    );
+  }
+  const liftDirection = normalize3(cross3([0, 1, 0], direction));
+  const forceScale = 1 / referenceAreaM2;
+  const spanMomentScale = 1 / (referenceAreaM2 * referenceSpanM);
+  const chordMomentScale = 1 / (referenceAreaM2 * referenceChordM);
+  return {
+    liftCoefficient: dot3(forceBody, liftDirection) * forceScale,
+    dragCoefficient: Math.max(0, -dot3(forceBody, direction) * forceScale),
+    sideForceCoefficient: forceBody[1] * forceScale,
+    rollMomentCoefficient: momentBody[0] * spanMomentScale,
+    pitchMomentCoefficient: momentBody[1] * chordMomentScale,
+    yawMomentCoefficient: momentBody[2] * spanMomentScale
+  };
+}
+
 export function estimateGeometryDrag(
   physics: Pick<DerivedAircraftPhysics, "surfaces" | "panels">,
   referenceAreaM2: number,
@@ -522,6 +770,7 @@ export function estimateGeometryDrag(
   let wettedPanelAreaM2 = 0;
   let surfaceProfileDragAreaM2 = 0;
   let pressureDragAreaM2 = 0;
+  let attachedFlowDragAreaM2 = 0;
   let skinFrictionDragAreaM2 = 0;
 
   for (const surface of physics.surfaces) {
@@ -532,25 +781,41 @@ export function estimateGeometryDrag(
 
   for (const panel of physics.panels) {
     const alignment = dot3(direction, panel.normalBody);
-    const windwardAlignment = Math.max(0, alignment);
+    const windwardAlignment =
+      panel.flowModel === "closed_shell" ? Math.max(0, alignment) : Math.abs(alignment);
     projectedFrontalAreaM2 += panel.areaM2 * windwardAlignment;
     wettedPanelAreaM2 += panel.areaM2;
     pressureDragAreaM2 += panel.areaM2 * panel.pressureCoefficient * windwardAlignment ** 3;
-    skinFrictionDragAreaM2 +=
-      panel.areaM2 * panel.skinFrictionCoefficient * (1 - Math.abs(alignment)) ** 2;
+    const tangentFraction = Math.sqrt(Math.max(0, 1 - alignment ** 2));
+    const incidenceAngleRad = Math.asin(Math.min(1, Math.abs(alignment)));
+    const attachedCoefficient = Math.min(
+      panel.maximumAttachedFlowCoefficient,
+      panel.attachedFlowSlopePerRad * incidenceAngleRad * tangentFraction
+    );
+    attachedFlowDragAreaM2 +=
+      panel.areaM2 *
+      attachedCoefficient *
+      (panel.flowModel === "closed_shell" ? 0.5 : 1) *
+      Math.abs(alignment);
+    skinFrictionDragAreaM2 += panel.areaM2 * panel.skinFrictionCoefficient * tangentFraction ** 3;
   }
 
   const surfaceProfileCoefficient = surfaceProfileDragAreaM2 / referenceAreaM2;
   const pressureCoefficient = pressureDragAreaM2 / referenceAreaM2;
+  const attachedFlowCoefficient = attachedFlowDragAreaM2 / referenceAreaM2;
   const skinFrictionCoefficient = skinFrictionDragAreaM2 / referenceAreaM2;
   const totalBaseCoefficient =
-    surfaceProfileCoefficient + pressureCoefficient + skinFrictionCoefficient;
+    surfaceProfileCoefficient +
+    pressureCoefficient +
+    attachedFlowCoefficient +
+    skinFrictionCoefficient;
   return {
     referenceAreaM2,
     projectedFrontalAreaM2,
     wettedPanelAreaM2,
     surfaceProfileCoefficient,
     pressureCoefficient,
+    attachedFlowCoefficient,
     skinFrictionCoefficient,
     totalBaseCoefficient,
     equivalentDragAreaM2: totalBaseCoefficient * referenceAreaM2

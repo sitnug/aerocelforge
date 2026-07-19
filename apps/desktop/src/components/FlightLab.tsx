@@ -380,14 +380,15 @@ export function FlightLab(props: FlightLabProps) {
   const hasBattery = battery !== undefined && battery.stateOfCharge > 0;
   const hasPropulsion = model.propulsors.length > 0 && model.maximumTotalThrustN > 0;
   const canPoweredFlight = hasBattery && hasPropulsion;
-  const hasRollSurface = model.surfaces.some((surface) =>
+  const aerodynamicControls = [...model.surfaces, ...model.panels];
+  const hasRollSurface = aerodynamicControls.some((surface) =>
     ["roll", "elevon", "flaperon"].includes(surface.control)
   );
-  const hasPitchSurface = model.surfaces.some((surface) =>
+  const hasPitchSurface = aerodynamicControls.some((surface) =>
     ["pitch", "elevon"].includes(surface.control)
   );
-  const hasYawSurface = model.surfaces.some((surface) => surface.control === "yaw");
-  const hasFlapSurface = model.surfaces.some((surface) =>
+  const hasYawSurface = aerodynamicControls.some((surface) => surface.control === "yaw");
+  const hasFlapSurface = aerodynamicControls.some((surface) =>
     ["flap", "brake", "flaperon"].includes(surface.control)
   );
 

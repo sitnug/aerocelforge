@@ -27,12 +27,14 @@ import {
 import type { AerocelProject } from "@aerocel/simulation-schema";
 import {
   deriveAircraftPhysics,
+  estimateGeometryAerodynamicLoads,
   estimateGeometryDrag,
   type GeometryDragEstimate
 } from "./aircraftPhysics";
 import { configuredMotorThrustN } from "./componentProperties";
 
 export interface RapidAnalysis {
+  readonly aerodynamicSource: "geometry_surface_panels" | "component_buildup";
   readonly mass: CombinedMassProperties;
   readonly atmosphere: ReturnType<typeof isaAtmosphere>;
   readonly geometryDrag: GeometryDragEstimate;
@@ -110,6 +112,67 @@ const withGeometryDragValidity = (result: AnalyticalAeroResult): AnalyticalAeroR
       : item
   )
 });
+
+function withGeometrySurfaceLoads(
+  result: AnalyticalAeroResult,
+  loads: ReturnType<typeof estimateGeometryAerodynamicLoads>,
+  zeroLiftDragCoefficient: number,
+  additionalDragCoefficient: number,
+  referenceAreaM2: number,
+  referenceSpanM: number,
+  referenceChordM: number,
+  liftSlopePerRad: number,
+  angleOfAttackRad: number
+): AnalyticalAeroResult {
+  const cl = loads.liftCoefficient;
+  const cd = loads.dragCoefficient + additionalDragCoefficient;
+  const dynamicPressurePa = result.dynamicPressurePa;
+  const inducedDragCoefficient = Math.max(0, loads.dragCoefficient - zeroLiftDragCoefficient);
+  return {
+    ...result,
+    coefficients: {
+      cl,
+      cd,
+      cy: loads.sideForceCoefficient,
+      roll: loads.rollMomentCoefficient,
+      cm: loads.pitchMomentCoefficient,
+      cn: loads.yawMomentCoefficient
+    },
+    forcesN: {
+      lift: dynamicPressurePa * referenceAreaM2 * cl,
+      drag: dynamicPressurePa * referenceAreaM2 * cd,
+      side: dynamicPressurePa * referenceAreaM2 * loads.sideForceCoefficient
+    },
+    momentsNm: {
+      roll: dynamicPressurePa * referenceAreaM2 * referenceSpanM * loads.rollMomentCoefficient,
+      pitch: dynamicPressurePa * referenceAreaM2 * referenceChordM * loads.pitchMomentCoefficient,
+      yaw: dynamicPressurePa * referenceAreaM2 * referenceSpanM * loads.yawMomentCoefficient
+    },
+    finiteWingLiftSlopePerRad: liftSlopePerRad,
+    inducedDragCoefficient,
+    dragBreakdown: {
+      zeroLift: zeroLiftDragCoefficient,
+      induced: inducedDragCoefficient,
+      sideslip: 0,
+      additional: additionalDragCoefficient,
+      total: cd
+    },
+    stallMarginRad: (15 * Math.PI) / 180 - Math.abs(angleOfAttackRad),
+    validity: [
+      "Forces come from the imported triangle positions, sizes, and directions",
+      "Each triangle uses its own local wind in Fly",
+      "No airfoil name or lift table is required",
+      "This quick model does not resolve the surrounding pressure field, wake, viscosity, or turbulence"
+    ],
+    warnings: [
+      ...result.warnings.filter(
+        (warning) =>
+          !warning.includes("parabolic-polar") && !warning.includes("No explicit excrescence")
+      ),
+      "Geometry surface panels are a fast flight model, not CFD or test validation. Use a connected CFD solver and physical tests before engineering decisions."
+    ]
+  };
+}
 
 function solvePropeller(
   bladeCount: number,
@@ -213,7 +276,32 @@ export function runRapidAnalysis(
     project.environment.altitudeM,
     project.environment.temperatureK ?? undefined
   );
-  const designPoint = withGeometryDragValidity(
+  const usesGeometrySurfacePanels =
+    aircraftPhysics.meshPanelCount > 0 && aircraftPhysics.surfaces.length === 0;
+  const aerodynamicSource = usesGeometrySurfacePanels
+    ? "geometry_surface_panels"
+    : "component_buildup";
+  const panelLoadsAtAngle = (angleDeg: number) => {
+    const angleRad = (angleDeg * Math.PI) / 180;
+    return estimateGeometryAerodynamicLoads(
+      aircraftPhysics.panels,
+      project.vehicle.reference.areaM2,
+      project.vehicle.reference.spanM,
+      project.vehicle.reference.chordM,
+      mass.centerOfGravityM,
+      [Math.cos(angleRad), 0, Math.sin(angleRad)]
+    );
+  };
+  const slopeStepDeg = 1;
+  const geometryLiftSlopePerRad = usesGeometrySurfacePanels
+    ? Math.max(
+        0.1,
+        (panelLoadsAtAngle(slopeStepDeg).liftCoefficient -
+          panelLoadsAtAngle(-slopeStepDeg).liftCoefficient) /
+          ((2 * slopeStepDeg * Math.PI) / 180)
+      )
+    : 0;
+  const preliminaryDesignPoint = withGeometryDragValidity(
     analyzeComponentBuildup(
       inputForAero(
         project,
@@ -224,6 +312,19 @@ export function runRapidAnalysis(
       )
     )
   );
+  const designPoint = usesGeometrySurfacePanels
+    ? withGeometrySurfaceLoads(
+        preliminaryDesignPoint,
+        panelLoadsAtAngle(options.angleOfAttackDeg),
+        zeroLiftGeometryDrag.totalBaseCoefficient,
+        options.additionalDragCounts / 10_000,
+        project.vehicle.reference.areaM2,
+        project.vehicle.reference.spanM,
+        project.vehicle.reference.chordM,
+        geometryLiftSlopePerRad,
+        (options.angleOfAttackDeg * Math.PI) / 180
+      )
+    : preliminaryDesignPoint;
   const polar = Array.from({ length: 23 }, (_, index) => -8 + index).map((alphaDeg) => {
     const result = analyzeComponentBuildup(
       inputForAero(
@@ -234,6 +335,15 @@ export function runRapidAnalysis(
         dragAtAngle(alphaDeg).totalBaseCoefficient
       )
     );
+    if (usesGeometrySurfacePanels) {
+      const loads = panelLoadsAtAngle(alphaDeg);
+      return {
+        alphaDeg,
+        cl: loads.liftCoefficient,
+        cd: loads.dragCoefficient + options.additionalDragCounts / 10_000,
+        cm: loads.pitchMomentCoefficient
+      };
+    }
     return {
       alphaDeg,
       cl: result.coefficients.cl,
@@ -379,6 +489,7 @@ export function runRapidAnalysis(
     }
   );
   return {
+    aerodynamicSource,
     mass,
     atmosphere,
     geometryDrag,

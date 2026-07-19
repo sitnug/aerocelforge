@@ -15,7 +15,12 @@ import {
   subtract3,
   type Vector3
 } from "@aerocel/math-core";
-import type { AerodynamicPanel, AerodynamicSurface, FlightPropulsor } from "./aircraftPhysics";
+import {
+  aerodynamicPanelLoad,
+  type AerodynamicPanel,
+  type AerodynamicSurface,
+  type FlightPropulsor
+} from "./aircraftPhysics";
 
 const GRAVITY_M_S2 = 9.80665;
 const DEG_TO_RAD = Math.PI / 180;
@@ -571,7 +576,10 @@ function postStallLiftCoefficient(angleOfAttackRad: number, surface: Aerodynamic
   return Math.sign(linear) * liftAtStall * decay;
 }
 
-function surfaceCommand(surface: AerodynamicSurface, controls: AppliedFlightControls): number {
+function surfaceCommand(
+  surface: Pick<AerodynamicSurface, "control" | "controlSign" | "positionBodyM">,
+  controls: AppliedFlightControls
+): number {
   if (surface.control === "roll") return controls.roll * surface.controlSign;
   if (surface.control === "pitch") return controls.pitch * surface.controlSign;
   if (surface.control === "yaw") return controls.yaw * surface.controlSign;
@@ -704,27 +712,13 @@ export function aerodynamicAndPropulsiveLoads(
     const localSpeed = magnitude3(localVelocity);
     if (localSpeed <= 0.15) continue;
     const localDirection = safeUnit(localVelocity);
-    const alignment = dot3(localDirection, panel.normalBody);
-    const normalForceN =
-      alignment <= 0
-        ? 0
-        : 0.5 *
-          model.densityKgM3 *
-          localSpeed ** 2 *
-          panel.areaM2 *
-          panel.pressureCoefficient *
-          alignment ** 2;
-    const frictionForceN =
-      0.5 *
-      model.densityKgM3 *
-      localSpeed ** 2 *
-      panel.areaM2 *
-      panel.skinFrictionCoefficient *
-      (1 - Math.abs(alignment)) ** 2;
-    const panelForce = addVector(
-      scale3(panel.normalBody, -normalForceN),
-      scale3(localDirection, -frictionForceN)
+    const panelLoad = aerodynamicPanelLoad(
+      panel,
+      localVelocity,
+      model.densityKgM3,
+      surfaceCommand(panel, controls)
     );
+    const panelForce = panelLoad.forceBodyN;
     forceBodyN = addVector(forceBodyN, panelForce);
     momentBodyNm = addVector(momentBodyNm, cross3(momentArm, panelForce));
     const panelDragN = Math.max(0, -dot3(panelForce, localDirection));
@@ -734,11 +728,11 @@ export function aerodynamicAndPropulsiveLoads(
     panelLoads.set(panel.componentId, {
       componentId: panel.componentId,
       name: panel.name,
-      dynamicPressurePa: 0.5 * model.densityKgM3 * localSpeed ** 2,
+      dynamicPressurePa: panelLoad.dynamicPressurePa,
       liftN: (previous?.liftN ?? 0) + Math.max(0, -panelForce[2]),
       dragN: (previous?.dragN ?? 0) + panelDragN,
       sideForceN: (previous?.sideForceN ?? 0) + Math.abs(panelForce[1]),
-      angleOfAttackRad: 0
+      angleOfAttackRad: panelLoad.incidenceAngleRad
     });
   }
   surfaceLoads.push(...panelLoads.values());

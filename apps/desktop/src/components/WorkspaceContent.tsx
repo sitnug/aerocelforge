@@ -1416,6 +1416,7 @@ function PropulsionWorkspace(props: CompleteWorkspaceContentProps) {
 }
 
 function AeroWorkspace(props: CompleteWorkspaceContentProps) {
+  const usesGeometrySurfacePanels = props.analysis.aerodynamicSource === "geometry_surface_panels";
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
@@ -1488,7 +1489,11 @@ function AeroWorkspace(props: CompleteWorkspaceContentProps) {
           label="LIFT COEFFICIENT"
           value={props.analysis.designPoint.coefficients.cl.toFixed(3)}
           detail={`${props.analysis.designPoint.forcesN.lift.toFixed(0)} N at design point`}
-          provenance="A1 preliminary estimate"
+          provenance={
+            usesGeometrySurfacePanels
+              ? "Imported surface reaction · quick estimate"
+              : "A1 preliminary estimate"
+          }
           tone="accent"
         />
         <MetricCard
@@ -1505,14 +1510,16 @@ function AeroWorkspace(props: CompleteWorkspaceContentProps) {
             props.analysis.designPoint.coefficients.cl / props.analysis.designPoint.coefficients.cd
           ).toFixed(1)}
           detail={`Best envelope ${props.analysis.glide.bestGlide.liftToDrag.toFixed(1)}`}
-          provenance="Derived from A1 polar"
+          provenance={
+            usesGeometrySurfacePanels ? "Derived from imported surfaces" : "Derived from A1 polar"
+          }
         />
         <MetricCard
           label="STALL MARGIN"
           value={((props.analysis.designPoint.stallMarginRad * 180) / Math.PI).toFixed(1)}
           unit="deg"
-          detail="Attached-flow limit only"
-          provenance="User-entered limit"
+          detail="Quick-model limit only"
+          provenance={usesGeometrySurfacePanels ? "Generic surface limit" : "User-entered limit"}
           tone={props.analysis.designPoint.stallMarginRad < 0 ? "danger" : "warning"}
         />
       </div>
@@ -1520,9 +1527,11 @@ function AeroWorkspace(props: CompleteWorkspaceContentProps) {
         <div className="section-card__header">
           <span>
             <small>DRAG ACCOUNTING</small>
-            <h2>What the A1 total contains</h2>
+            <h2>What the quick airflow total contains</h2>
           </span>
-          <Badge tone="warning">Geometry panels + induced</Badge>
+          <Badge tone="warning">
+            {usesGeometrySurfacePanels ? "Imported surface forces" : "Parts + induced"}
+          </Badge>
         </div>
         <div className="detail-grid aero-drag-grid">
           <span>
@@ -1532,6 +1541,10 @@ function AeroWorkspace(props: CompleteWorkspaceContentProps) {
           <span>
             <small>BODY / MESH PRESSURE</small>
             <strong>{props.analysis.geometryDrag.pressureCoefficient.toFixed(5)}</strong>
+          </span>
+          <span>
+            <small>SURFACE REACTION</small>
+            <strong>{props.analysis.geometryDrag.attachedFlowCoefficient.toFixed(5)}</strong>
           </span>
           <span>
             <small>SKIN FRICTION</small>
@@ -1560,11 +1573,10 @@ function AeroWorkspace(props: CompleteWorkspaceContentProps) {
         </div>
         <p className="card-copy">
           This CD uses the aircraft wing reference area of{" "}
-          {props.project.vehicle.reference.areaM2.toFixed(3)} m². It now includes pressure and skin
-          drag from each available mesh or fallback body panel, profile drag from each lifting
-          surface, and induced drag. A CD from a table that uses frontal area is not directly
-          comparable. Interference, cooling flow, roughness, and separation still need CFD or
-          measured data.
+          {props.project.vehicle.reference.areaM2.toFixed(3)} m². Imported faces react from their
+          real size, direction, and angle to the wind; no airfoil name is needed. This quick model
+          still cannot resolve the full pressure field, wake, turbulence, or separation. Use a
+          connected CFD solver and physical tests before engineering decisions.
         </p>
         {props.advancedMode && (
           <div className="aero-reference-editor">
@@ -1616,20 +1628,28 @@ function AeroWorkspace(props: CompleteWorkspaceContentProps) {
       <div className="plot-grid">
         <EngineeringPlot
           title="Lift curve"
-          subtitle="Finite-wing analytical buildup; clipped beyond the configured CL maximum"
+          subtitle={
+            usesGeometrySurfacePanels
+              ? "Calculated from imported face directions; bounded outside attached flow"
+              : "Finite-wing analytical buildup; clipped beyond the configured CL maximum"
+          }
           xLabel="Angle of attack (deg)"
           yLabel="CL (—)"
           data={props.analysis.polar.map((point) => ({ x: point.alphaDeg, y: point.cl }))}
-          source="Aerocel analytical core"
+          source={
+            usesGeometrySurfacePanels ? "Aerocel geometry surface model" : "Aerocel analytical core"
+          }
           fidelity="A1 · estimated"
         />
         <EngineeringPlot
           title="Drag polar"
-          subtitle="Geometry pressure, skin friction, surface profile, induced, and added drag"
+          subtitle="Surface pressure, normal reaction, skin friction, and added drag"
           xLabel="CD (—)"
           yLabel="CL (—)"
           data={props.analysis.polar.map((point) => ({ x: point.cd, y: point.cl }))}
-          source="Aerocel analytical core"
+          source={
+            usesGeometrySurfacePanels ? "Aerocel geometry surface model" : "Aerocel analytical core"
+          }
           fidelity="A1 · estimated"
           color="#ffb45b"
         />
@@ -2513,6 +2533,10 @@ function OptimizationWorkspace(props: CompleteWorkspaceContentProps) {
 }
 
 function ResultsWorkspace(props: CompleteWorkspaceContentProps) {
+  const aerodynamicFidelity =
+    props.analysis.aerodynamicSource === "geometry_surface_panels"
+      ? "Geometry surface panels"
+      : "A1 parabolic polar";
   const rows = [
     [
       "Takeoff mass",
@@ -2525,7 +2549,7 @@ function ResultsWorkspace(props: CompleteWorkspaceContentProps) {
       "CL at design point",
       props.analysis.designPoint.coefficients.cl.toFixed(3),
       "estimated",
-      "A1 parabolic polar",
+      aerodynamicFidelity,
       "Preliminary"
     ],
     [
@@ -2810,6 +2834,10 @@ function ValidationWorkspace(props: CompleteWorkspaceContentProps) {
 }
 
 function ReportsWorkspace(props: CompleteWorkspaceContentProps) {
+  const aerodynamicFidelity =
+    props.analysis.aerodynamicSource === "geometry_surface_panels"
+      ? "Geometry surface panels"
+      : "A1 parabolic polar";
   const [exporting, setExporting] = useState(false);
   const exportReport = (): void => {
     setExporting(true);
@@ -2841,7 +2869,7 @@ function ReportsWorkspace(props: CompleteWorkspaceContentProps) {
               name: "Design-point CL",
               value: props.analysis.designPoint.coefficients.cl.toFixed(3),
               provenance: "Estimated",
-              fidelity: "A1 parabolic polar",
+              fidelity: aerodynamicFidelity,
               quality: "Preliminary",
               uncertainty: "Not quantified",
               warning: props.analysis.designPoint.warnings.join(" ")

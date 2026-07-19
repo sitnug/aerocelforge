@@ -350,6 +350,13 @@ describe("interactive flight physics", () => {
       areaM2: 0.5,
       pressureCoefficient: 1,
       skinFrictionCoefficient: 0,
+      attachedFlowSlopePerRad: 2 * Math.PI,
+      maximumAttachedFlowCoefficient: 1.4,
+      flowModel: "closed_shell" as const,
+      control: "none" as const,
+      controlSign: 1,
+      controlEffectivenessRad: 0,
+      controlAxisBody: [0, 1, 0] as const,
       source: "mesh" as const
     };
     const small = aerodynamicAndPropulsiveLoads(
@@ -368,6 +375,38 @@ describe("interactive flight physics", () => {
     expect(small.diagnostics.dragCoefficient).toBeCloseTo(0.5 / model.wingAreaM2, 10);
     expect(large.diagnostics.dragCoefficient).toBeCloseTo(1 / model.wingAreaM2, 10);
     expect(Math.abs(small.momentBodyNm[2])).toBeGreaterThan(0);
+  });
+
+  it("turns an imported mesh control surface through its real panel force", () => {
+    const initial = createInitialFlightState(model, "cruise");
+    const controls = { ...initial.appliedControls, throttle: 0, roll: 0.8, tiltRad: 0 };
+    const panel = {
+      componentId: "mesh-aileron",
+      name: "Imported aileron",
+      positionBodyM: [0, 0.7, 0] as const,
+      normalBody: [0, 0, 1] as const,
+      areaM2: 0.2,
+      pressureCoefficient: 0.9,
+      skinFrictionCoefficient: 0.005,
+      attachedFlowSlopePerRad: 2 * Math.PI,
+      maximumAttachedFlowCoefficient: 1.4,
+      flowModel: "two_sided_surface" as const,
+      control: "roll" as const,
+      controlSign: 1,
+      controlEffectivenessRad: (15 * Math.PI) / 180,
+      controlAxisBody: [0, 1, 0] as const,
+      source: "mesh" as const
+    };
+    const loads = aerodynamicAndPropulsiveLoads(
+      { ...model, surfaces: [], propulsors: [], panels: [panel] },
+      initial,
+      controls,
+      [0, 0, 0]
+    );
+
+    expect(loads.diagnostics.liftN).toBeGreaterThan(0);
+    expect(Math.abs(loads.momentBodyNm[0])).toBeGreaterThan(0);
+    expect(loads.diagnostics.surfaceLoads[0]?.angleOfAttackRad).toBeGreaterThan(0);
   });
 
   it("uses the actual surrounding wind in every local air load", () => {

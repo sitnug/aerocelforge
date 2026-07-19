@@ -601,6 +601,17 @@ export function ComponentPropertiesEditor({
   const isLiftingSurface =
     horizontalSurfaceTypes.includes(component.type) ||
     ["vertical_stabilizer", "rudder"].includes(component.type);
+  const isMovableAirSurface = [
+    "control_surface",
+    "flap",
+    "aileron",
+    "elevator",
+    "rudder",
+    "elevon",
+    "flaperon",
+    "spoiler",
+    "air_brake"
+  ].includes(component.type);
   const hasAirSettings =
     component.geometry.kind === "mesh" ||
     isLiftingSurface ||
@@ -624,7 +635,13 @@ export function ComponentPropertiesEditor({
       </label>
       {componentAerodynamicEnabled(component) && (
         <div className="engineering-fields">
-          {isLiftingSurface ? (
+          {component.geometry.kind === "mesh" && (
+            <small>
+              The imported faces react from their real size and direction. You do not need to name
+              an airfoil.
+            </small>
+          )}
+          {isLiftingSurface && component.geometry.kind !== "mesh" ? (
             <>
               <NumberPropertyField
                 id={fieldId("air-base-drag")}
@@ -705,17 +722,51 @@ export function ComponentPropertiesEditor({
                 onCommit={(value) => commit("aeroPressureCoefficient", value)}
               />
               {advancedMode && (
-                <NumberPropertyField
-                  id={fieldId("air-skin-friction")}
-                  label="Skin drag strength"
-                  value={propertyNumber("aeroSkinFrictionCoefficient", 0.005)}
-                  unit="Cf"
-                  help="A simple estimate of the air rubbing along the part. Surface finish and Reynolds number affect the real value."
-                  minimum={0}
-                  maximum={0.2}
-                  step={0.001}
-                  onCommit={(value) => commit("aeroSkinFrictionCoefficient", value)}
-                />
+                <>
+                  <NumberPropertyField
+                    id={fieldId("air-skin-friction")}
+                    label="Skin drag strength"
+                    value={propertyNumber("aeroSkinFrictionCoefficient", 0.005)}
+                    unit="Cf"
+                    help="A simple estimate of the air rubbing along the part. Surface finish and Reynolds number affect the real value."
+                    minimum={0}
+                    maximum={0.2}
+                    step={0.001}
+                    onCommit={(value) => commit("aeroSkinFrictionCoefficient", value)}
+                  />
+                  {component.geometry.kind === "mesh" && (
+                    <NumberPropertyField
+                      id={fieldId("air-surface-force-limit")}
+                      label="Surface force limit"
+                      value={propertyNumber("aeroMaximumLiftCoefficient", 1.4)}
+                      unit="C"
+                      help="Stops the quick surface reaction from growing forever at steep wind angles. This is a safety limit for the fast model, not an airfoil lookup."
+                      minimum={0.05}
+                      maximum={4}
+                      step={0.05}
+                      onCommit={(value) => commit("aeroMaximumLiftCoefficient", value)}
+                    />
+                  )}
+                  {component.geometry.kind === "mesh" && isMovableAirSurface && (
+                    <NumberPropertyField
+                      id={fieldId("air-mesh-control-effect")}
+                      label="Full movement angle"
+                      value={
+                        (propertyNumber("aeroControlEffectivenessRad", (12 * Math.PI) / 180) *
+                          180) /
+                        Math.PI
+                      }
+                      unit="°"
+                      help="How far this imported aileron, elevator, rudder, or flap turns at full input. Its mesh faces rotate by this amount in Fly."
+                      minimum={0}
+                      maximum={45}
+                      step={0.5}
+                      onCommit={(value) =>
+                        commit("aeroControlEffectivenessRad", (value * Math.PI) / 180)
+                      }
+                    />
+                  )}
+                </>
               )}
             </>
           )}

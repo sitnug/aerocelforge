@@ -1,6 +1,10 @@
 import type { TriangleMesh } from "@aerocel/geometry-core";
 import { describe, expect, it } from "vitest";
-import { deriveAircraftPhysics, estimateGeometryDrag } from "./aircraftPhysics";
+import {
+  deriveAircraftPhysics,
+  estimateGeometryAerodynamicLoads,
+  estimateGeometryDrag
+} from "./aircraftPhysics";
 import { kestrelProject } from "./kestrel";
 
 const thrustByUnit = new Map(
@@ -145,7 +149,109 @@ describe("per-part aircraft physics", () => {
 
     expect(meshPanels).toHaveLength(2);
     expect(meshPanels.map((panel) => panel.normalBody[0]).sort()).toEqual([-1, 1]);
-    expect(drag.pressureCoefficient).toBeCloseTo(0.45, 12);
+    expect(drag.pressureCoefficient).toBeCloseTo(0.9, 12);
+  });
+
+  it("makes an unnamed imported surface generate lift directly from its geometry", () => {
+    const sha = "c".repeat(64);
+    const fuselage = kestrelProject.vehicle.components.find(
+      (component) => component.type === "fuselage"
+    );
+    expect(fuselage).toBeDefined();
+    if (fuselage === undefined) return;
+    const mesh: TriangleMesh = {
+      vertices: [
+        [-0.5, -0.5, 0],
+        [0.5, -0.5, 0],
+        [0.5, 0.5, 0],
+        [-0.5, 0.5, 0]
+      ],
+      faces: [
+        [0, 1, 2],
+        [0, 2, 3]
+      ]
+    };
+    const project = {
+      ...kestrelProject,
+      vehicle: {
+        ...kestrelProject.vehicle,
+        components: [
+          {
+            ...fuselage,
+            type: "fairing" as const,
+            transform: {
+              ...fuselage.transform,
+              translationM: [0, 0, 0] as [number, number, number],
+              scale: [1, 1, 1] as [number, number, number],
+              rotationRad: [0, 0, 0] as [number, number, number]
+            },
+            geometry: { ...fuselage.geometry, kind: "mesh" as const, sourceSha256: sha }
+          }
+        ],
+        joints: [],
+        propulsionUnits: []
+      }
+    };
+    const physics = deriveAircraftPhysics(project, new Map([[sha, mesh]]), new Map(), 4.7);
+    const angleRad = (5 * Math.PI) / 180;
+    const positive = estimateGeometryAerodynamicLoads(
+      physics.panels,
+      1,
+      1,
+      1,
+      [0, 0, 0],
+      [Math.cos(angleRad), 0, Math.sin(angleRad)]
+    );
+    const negative = estimateGeometryAerodynamicLoads(
+      physics.panels,
+      1,
+      1,
+      1,
+      [0, 0, 0],
+      [Math.cos(angleRad), 0, -Math.sin(angleRad)]
+    );
+
+    expect(physics.surfaces).toHaveLength(0);
+    expect(physics.panels.every((panel) => panel.flowModel === "two_sided_surface")).toBe(true);
+    expect(positive.liftCoefficient).toBeGreaterThan(0.4);
+    expect(negative.liftCoefficient).toBeLessThan(-0.4);
+    expect(positive.dragCoefficient).toBeGreaterThan(0);
+  });
+
+  it("uses imported control-surface triangles instead of an airfoil lookup", () => {
+    const sha = "d".repeat(64);
+    const aileron = kestrelProject.vehicle.components.find(
+      (component) => component.type === "aileron"
+    );
+    expect(aileron).toBeDefined();
+    if (aileron === undefined) return;
+    const mesh: TriangleMesh = {
+      vertices: [
+        [0, 0, 0],
+        [1, 0, 0],
+        [0, 1, 0]
+      ],
+      faces: [[0, 1, 2]]
+    };
+    const project = {
+      ...kestrelProject,
+      vehicle: {
+        ...kestrelProject.vehicle,
+        components: [
+          {
+            ...aileron,
+            geometry: { ...aileron.geometry, kind: "mesh" as const, sourceSha256: sha }
+          }
+        ],
+        joints: [],
+        propulsionUnits: []
+      }
+    };
+    const physics = deriveAircraftPhysics(project, new Map([[sha, mesh]]), new Map(), 4.7);
+
+    expect(physics.surfaces).toHaveLength(0);
+    expect(physics.panels).toHaveLength(1);
+    expect(physics.panels[0]?.control).toBe("roll");
   });
 
   it("keeps combined elevon and flaperon control roles", () => {
