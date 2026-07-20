@@ -57,6 +57,11 @@ powered propeller with no separate visible motor block. Its thrust and power val
 are edited on the propeller itself. If you add a Motor first, the next propeller
 pairs with it. **Motor + propeller** remains an optional two-shape part.
 
+Part rotation follows aircraft axes: Roll banks around the forward axis, Pitch
+moves the nose up or down around the side-to-side axis, and Yaw moves the nose
+left or right around the vertical axis. These axes remain independent even when
+the part already has another rotation.
+
 Outside a text box, `Command-Z` undoes an aircraft change and `Shift-Command-Z`
 redoes it. Select a part and use `Command-C` and `Command-V` to copy and paste it.
 Attached child parts and their matching joint, battery, or propulsion setup are

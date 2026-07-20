@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { applySceneTransformMatrix, componentTransformToSceneMatrix } from "./viewportTransforms";
+import {
+  applySceneTransformMatrix,
+  bodyRotationToSceneQuaternion,
+  componentTransformToSceneMatrix
+} from "./viewportTransforms";
 
 const transform = {
   translationM: [1, 2, 3] as [number, number, number],
@@ -29,6 +33,18 @@ describe("viewport transform handles", () => {
     result.rotationRad.forEach((value, index) =>
       expect(value).toBeCloseTo(transform.rotationRad[index] ?? 0, 10)
     );
+  });
+
+  it("keeps pitch on the side-to-side axis instead of turning it into roll", () => {
+    const forward = new THREE.Vector3(1, 0, 0);
+    const roll = bodyRotationToSceneQuaternion([Math.PI / 2, 0, 0]);
+    const pitch = bodyRotationToSceneQuaternion([0, Math.PI / 2, 0]);
+
+    expect(forward.clone().applyQuaternion(roll).toArray()).toEqual([1, 0, 0]);
+    const pitchedForward = forward.clone().applyQuaternion(pitch);
+    expect(pitchedForward.x).toBeCloseTo(0, 10);
+    expect(pitchedForward.y).toBeCloseTo(1, 10);
+    expect(pitchedForward.z).toBeCloseTo(0, 10);
   });
 
   it("round-trips each aircraft size through the scale handles", () => {

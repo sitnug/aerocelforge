@@ -8,6 +8,7 @@ import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { halfSurfaceSpanDirection } from "../lib/aircraftPresentation";
 import {
   applySceneTransformMatrix,
+  bodyRotationToSceneQuaternion,
   componentTransformToSceneMatrix
 } from "../lib/viewportTransforms";
 
@@ -158,6 +159,7 @@ interface SelectableProps {
   readonly children: React.ReactNode;
   readonly position?: [number, number, number];
   readonly rotation?: [number, number, number];
+  readonly quaternion?: THREE.Quaternion;
   readonly scale?: [number, number, number];
 }
 
@@ -172,6 +174,7 @@ function Selectable({
   children,
   position,
   rotation,
+  quaternion,
   scale
 }: SelectableProps) {
   const [hovered, setHovered] = useState(false);
@@ -195,6 +198,7 @@ function Selectable({
     <group
       {...(position === undefined ? {} : { position })}
       {...(rotation === undefined ? {} : { rotation })}
+      {...(quaternion === undefined ? {} : { quaternion })}
       onClick={handleClick}
       onContextMenu={(event) => {
         if (onPartContextMenu === undefined) return;
@@ -273,9 +277,9 @@ function SurfaceMesh({
   if (component.type === "wing") bodyPosition[1] += Math.sign(bodyPosition[1]) * explodedOffset;
   const position = bodyToScene(bodyPosition);
   const [roll, pitch, yaw] = component.transform.rotationRad;
-  const rotation: [number, number, number] = isVertical
-    ? [roll, -yaw - deflectionRad, pitch]
-    : [roll, -yaw, pitch + deflectionRad];
+  const rotation = bodyRotationToSceneQuaternion(
+    isVertical ? [roll, pitch, yaw + deflectionRad] : [roll, pitch + deflectionRad, yaw]
+  );
   const [scaleX, scaleY, scaleZ] = component.transform.scale;
   return (
     <Selectable
@@ -283,7 +287,7 @@ function SurfaceMesh({
       selected={selected}
       onSelect={onSelect}
       position={position}
-      rotation={rotation}
+      quaternion={rotation}
       scale={[scaleX, scaleZ, scaleY]}
     >
       {geometries.map((geometry, index) => (
@@ -338,7 +342,11 @@ function ImportedComponentMesh({
   return (
     <group
       position={position}
-      rotation={[roll, -yaw, pitch + (tiltsWithRotor ? tiltRad : 0)]}
+      quaternion={bodyRotationToSceneQuaternion([
+        roll,
+        pitch + (tiltsWithRotor ? tiltRad : 0),
+        yaw
+      ])}
       scale={[scaleX, scaleZ, scaleY]}
     >
       <Selectable component={component} selected={selected} onSelect={onSelect}>
@@ -393,7 +401,7 @@ function ComponentMesh({
   const [x, y, z] = bodyToScene(component.transform.translationM);
   const [roll, pitch, yaw] = component.transform.rotationRad;
   const [scaleX, scaleY, scaleZ] = component.transform.scale;
-  const sceneRotation: [number, number, number] = [roll, -yaw, pitch];
+  const sceneRotation = bodyRotationToSceneQuaternion([roll, pitch, yaw]);
   const sceneScale: [number, number, number] = [scaleX, scaleZ, scaleY];
   const commonMaterial = (
     <meshStandardMaterial
@@ -426,7 +434,7 @@ function ComponentMesh({
         selected={selected}
         onSelect={onSelect}
         position={[x, y, z]}
-        rotation={sceneRotation}
+        quaternion={sceneRotation}
         scale={sceneScale}
       >
         <mesh rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
@@ -476,7 +484,7 @@ function ComponentMesh({
         selected={selected}
         onSelect={onSelect}
         position={[x, y, z]}
-        rotation={[roll, -yaw, pitch + tiltRad]}
+        quaternion={bodyRotationToSceneQuaternion([roll, pitch + tiltRad, yaw])}
         scale={sceneScale}
       >
         <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
@@ -524,7 +532,7 @@ function ComponentMesh({
         selected={selected}
         onSelect={onSelect}
         position={[x, y, z]}
-        rotation={[roll, -yaw, pitch + tiltRad]}
+        quaternion={bodyRotationToSceneQuaternion([roll, pitch + tiltRad, yaw])}
         scale={sceneScale}
       >
         <mesh rotation={[0, Math.PI / 2, 0]}>
@@ -553,7 +561,7 @@ function ComponentMesh({
         selected={selected}
         onSelect={onSelect}
         position={[x, y, z]}
-        rotation={sceneRotation}
+        quaternion={sceneRotation}
         scale={sceneScale}
       >
         <mesh castShadow>
@@ -570,7 +578,7 @@ function ComponentMesh({
       selected={selected}
       onSelect={onSelect}
       position={[x, y, z]}
-      rotation={sceneRotation}
+      quaternion={sceneRotation}
       scale={sceneScale}
     >
       <mesh castShadow receiveShadow>

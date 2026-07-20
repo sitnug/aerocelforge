@@ -3,15 +3,38 @@ import * as THREE from "three";
 
 export type ViewportTransformMode = "translate" | "rotate" | "scale";
 
+const bodyToSceneFrame = new THREE.Quaternion().setFromAxisAngle(
+  new THREE.Vector3(1, 0, 0),
+  Math.PI / 2
+);
+const sceneToBodyFrame = bodyToSceneFrame.clone().invert();
+
+export function bodyRotationToSceneQuaternion(
+  rotationRad: readonly [number, number, number]
+): THREE.Quaternion {
+  const [roll, pitch, yaw] = rotationRad;
+  const bodyRotation = new THREE.Quaternion().setFromEuler(
+    new THREE.Euler(roll, pitch, yaw, "XYZ")
+  );
+  return bodyToSceneFrame.clone().multiply(bodyRotation).multiply(sceneToBodyFrame);
+}
+
+export function sceneQuaternionToBodyRotation(
+  sceneRotation: THREE.Quaternion
+): [number, number, number] {
+  const bodyRotation = sceneToBodyFrame.clone().multiply(sceneRotation).multiply(bodyToSceneFrame);
+  const bodyEuler = new THREE.Euler().setFromQuaternion(bodyRotation, "XYZ");
+  return [bodyEuler.x, bodyEuler.y, bodyEuler.z];
+}
+
 export function componentTransformToSceneMatrix(
   transform: VehicleComponent["transform"],
   mode: ViewportTransformMode
 ): THREE.Matrix4 {
   const [x, y, z] = transform.translationM;
-  const [roll, pitch, yaw] = transform.rotationRad;
   const rotation =
     mode === "rotate" || mode === "scale"
-      ? new THREE.Quaternion().setFromEuler(new THREE.Euler(roll, -yaw, pitch, "XYZ"))
+      ? bodyRotationToSceneQuaternion(transform.rotationRad)
       : new THREE.Quaternion();
   const sceneScale =
     mode === "scale"
@@ -30,7 +53,7 @@ export function applySceneTransformMatrix(
   const scale = new THREE.Vector3();
   matrix.decompose(position, quaternion, scale);
   const clean = (value: number): number => (Math.abs(value) < 1e-10 ? 0 : value);
-  const sceneRotation = new THREE.Euler().setFromQuaternion(quaternion, "XYZ");
+  const bodyRotation = sceneQuaternionToBodyRotation(quaternion);
   return {
     ...transform,
     translationM:
@@ -39,7 +62,7 @@ export function applySceneTransformMatrix(
         : transform.translationM,
     rotationRad:
       mode === "rotate"
-        ? [clean(sceneRotation.x), clean(sceneRotation.z), clean(-sceneRotation.y)]
+        ? [clean(bodyRotation[0]), clean(bodyRotation[1]), clean(bodyRotation[2])]
         : transform.rotationRad,
     scale:
       mode === "scale"

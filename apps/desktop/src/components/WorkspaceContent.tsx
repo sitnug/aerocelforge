@@ -599,9 +599,9 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                   </>
                 ) : transformMode === "rotate" ? (
                   <>
-                    <span className="axis-key axis-key--red">Roll</span>
-                    <span className="axis-key axis-key--blue">Pitch</span>
-                    <span className="axis-key axis-key--green">Yaw</span>
+                    <span className="axis-key axis-key--red">Roll · bank</span>
+                    <span className="axis-key axis-key--blue">Pitch · nose up/down</span>
+                    <span className="axis-key axis-key--green">Yaw · nose left/right</span>
                   </>
                 ) : (
                   <>
