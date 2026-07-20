@@ -884,6 +884,12 @@ kbd {
   color: #071410;
 }
 
+.tool-button--active {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  background: var(--accent-muted);
+  color: var(--accent-strong);
+}
+
 .button--quiet {
   background: var(--surface-subtle);
 }
@@ -910,6 +916,110 @@ kbd {
   width: 100%;
   height: 100%;
   min-height: 0;
+}
+
+.basic-part-library {
+  display: grid;
+  gap: 12px;
+  margin: 0 22px 16px;
+  padding: 15px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-muted) 42%, var(--surface));
+}
+
+.basic-part-library > header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.basic-part-library > header span {
+  display: grid;
+  gap: 2px;
+}
+
+.basic-part-library > header small {
+  color: var(--accent-strong);
+  font-size: 8px;
+  font-weight: 750;
+  letter-spacing: 0.13em;
+}
+
+.basic-part-library > header strong {
+  color: var(--text);
+  font-size: 14px;
+}
+
+.basic-part-library > header p {
+  max-width: 430px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: right;
+}
+
+.basic-part-library__grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.basic-part-library__grid > button {
+  display: grid;
+  grid-template-columns: 32px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 66px;
+  padding: 9px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  color: var(--text-soft);
+  text-align: left;
+  cursor: pointer;
+}
+
+.basic-part-library__grid > button:hover,
+.basic-part-library__grid > button:focus-visible {
+  border-color: var(--accent);
+  outline: 0;
+  background: color-mix(in srgb, var(--accent-muted) 58%, var(--surface-raised));
+}
+
+.basic-part-library__grid > button > span:nth-child(2) {
+  display: grid;
+  gap: 3px;
+}
+
+.basic-part-library__grid > button strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.basic-part-library__grid > button small {
+  color: var(--muted);
+  font-size: 9px;
+  line-height: 1.3;
+}
+
+.basic-part-library__icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--accent-muted);
+  color: var(--accent-strong);
+}
+
+.basic-part-library__icon--battery,
+.basic-part-library__icon--motor,
+.basic-part-library__icon--propeller {
+  background: var(--warning-muted);
+  color: var(--warning);
 }
 
 .viewport-panel {
@@ -997,6 +1107,21 @@ kbd {
 .viewport-quality small {
   color: #71867f;
   font-size: 9px;
+}
+
+.viewport-edit-hint {
+  position: absolute;
+  z-index: 3;
+  right: 16px;
+  bottom: 18px;
+  padding: 7px 10px;
+  border: 1px solid rgb(102 138 128 / 34%);
+  border-radius: 999px;
+  background: rgb(13 20 18 / 88%);
+  color: #c6ded7;
+  font-size: 9px;
+  pointer-events: none;
+  backdrop-filter: blur(10px);
 }
 
 .quality-light {
@@ -1649,7 +1774,7 @@ kbd {
   vertical-align: middle;
 }
 
-.info-tip summary {
+.info-tip__trigger {
   display: grid;
   place-items: center;
   width: 23px;
@@ -1667,13 +1792,8 @@ kbd {
     transform 120ms ease;
 }
 
-.info-tip summary::-webkit-details-marker {
-  display: none;
-}
-
-.info-tip summary:hover,
-.info-tip summary:focus-visible,
-.info-tip[open] summary {
+.info-tip__trigger:hover,
+.info-tip__trigger:focus-visible {
   border-color: var(--accent);
   background: var(--accent-muted);
   transform: translateY(-1px);
@@ -1701,8 +1821,7 @@ kbd {
 }
 
 .info-tip:hover .info-tip__popover,
-.info-tip:focus-within .info-tip__popover,
-.info-tip[open] .info-tip__popover {
+.info-tip--visible .info-tip__popover {
   display: block;
 }
 
@@ -1748,8 +1867,8 @@ kbd {
   gap: 7px;
 }
 
-.heading-with-help .info-tip summary,
-.inline-help-label .info-tip summary {
+.heading-with-help .info-tip__trigger,
+.inline-help-label .info-tip__trigger {
   width: 20px;
   height: 20px;
 }
@@ -1954,7 +2073,7 @@ kbd {
   min-height: 23px;
 }
 
-.metric-card__label .info-tip summary {
+.metric-card__label .info-tip__trigger {
   width: 19px;
   height: 19px;
 }
@@ -5709,6 +5828,37 @@ kbd {
   accent-color: var(--accent);
 }
 
+.flight-channel-slider--disabled {
+  opacity: 0.48;
+}
+
+.flight-automation-disabled {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--warning) 34%, var(--line));
+  border-radius: var(--radius-sm);
+  background: var(--warning-muted);
+  color: var(--warning);
+}
+
+.flight-automation-disabled span {
+  display: grid;
+  gap: 2px;
+}
+
+.flight-automation-disabled strong {
+  color: var(--text);
+  font-size: 10px;
+}
+
+.flight-automation-disabled small {
+  color: var(--muted);
+  font-size: 9px;
+}
+
 .remote-presets {
   margin-top: 14px;
 }
@@ -5979,6 +6129,16 @@ kbd {
     grid-template-columns: minmax(0, 1fr) 270px;
   }
 
+  .basic-part-library__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .transform-mode-control .tool-button {
+    width: 31px;
+    padding: 0;
+    font-size: 0;
+  }
+
   .metric-grid--four {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -6061,6 +6221,16 @@ kbd {
 
   .geometry-workspace {
     grid-template-columns: 1fr;
+  }
+
+  .basic-part-library > header {
+    align-items: start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .basic-part-library > header p {
+    text-align: left;
   }
 
   .inspector-panel {

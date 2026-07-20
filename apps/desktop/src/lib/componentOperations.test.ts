@@ -34,6 +34,7 @@ describe("component deletion", () => {
     expect(updated.vehicle.components).toEqual([]);
     expect(updated.vehicle.joints).toEqual([]);
     expect(updated.vehicle.propulsionUnits).toEqual([]);
+    expect(updated.vehicle.batteries).toEqual([]);
     expect(() => AerocelProjectSchema.parse(updated)).not.toThrow();
   });
 });

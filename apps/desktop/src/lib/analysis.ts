@@ -405,20 +405,32 @@ export function runRapidAnalysis(
   );
   const estimatedMotorCurrentA = Math.min(120, Math.max(0, totalShaftPowerW / (22.2 * 0.86)));
   const batteryInput = project.vehicle.batteries[0];
-  if (batteryInput === undefined) throw new Error("Rapid analysis requires a configured battery");
-  const battery = evaluateBattery(
-    {
-      series: batteryInput.series,
-      parallel: batteryInput.parallel,
-      cellOpenCircuitVoltageV: batteryInput.cellOpenCircuitVoltageV,
-      cellInternalResistanceOhm: batteryInput.cellInternalResistanceOhm,
-      stateOfCharge: batteryInput.stateOfCharge,
-      capacityAh: batteryInput.capacityAh,
-      maximumContinuousCurrentA: batteryInput.maxContinuousCurrentA
-    },
-    estimatedMotorCurrentA,
-    batteryInput.series * 3.2
-  );
+  const battery: BatteryOperatingPoint =
+    batteryInput === undefined
+      ? {
+          busVoltageV: 0,
+          openCircuitVoltageV: 0,
+          packResistanceOhm: 0,
+          currentA: 0,
+          powerW: 0,
+          remainingEnergyWhApprox: 0,
+          currentMarginA: 0,
+          brownoutRisk: false,
+          fidelity: "equivalent_circuit"
+        }
+      : evaluateBattery(
+          {
+            series: batteryInput.series,
+            parallel: batteryInput.parallel,
+            cellOpenCircuitVoltageV: batteryInput.cellOpenCircuitVoltageV,
+            cellInternalResistanceOhm: batteryInput.cellInternalResistanceOhm,
+            stateOfCharge: batteryInput.stateOfCharge,
+            capacityAh: batteryInput.capacityAh,
+            maximumContinuousCurrentA: batteryInput.maxContinuousCurrentA
+          },
+          estimatedMotorCurrentA,
+          batteryInput.series * 3.2
+        );
   const slipstream = estimateSlipstream(
     Math.max(0, propeller.thrustN),
     diameterM,

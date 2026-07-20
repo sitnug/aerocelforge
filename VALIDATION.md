@@ -33,6 +33,12 @@ The repository covers:
   per-part coefficient persistence.
 - blank-project schema support, portable unique file naming, retired-sample
   filtering, whole-aircraft import defaults, and deletion back to an empty file.
+- normal replace-on-type numeric editing, decimal/comma parsing and range checks;
+  basic-part schema validation, lone-propeller zero-thrust behavior, automatic
+  motor/propeller pairing, and linked battery cleanup after part deletion.
+- rapid analysis without a battery for unpowered aircraft, manual zero-thrust
+  glide startup, and geometry-driven surface response with no invented control
+  axis.
 
 Run the full matrix with the commands in [README.md](README.md). CI repeats the
 TypeScript, Python, and Rust gates on clean runners.
@@ -73,7 +79,7 @@ No result should receive a validated grade solely because a solver completed.
 
 ## Build record — 2026-07-20, macOS 15.7.3 arm64
 
-- `npm run check`: passed; 80 TypeScript tests, strict type checking, lint,
+- `npm run check`: passed; 91 TypeScript tests, strict type checking, lint,
   formatting, and every workspace build passed.
 - Python 3.9: compilation and 3 unit tests passed; strict mypy and Ruff passed.
 - Scientific orchestrator: real loopback `/health` smoke test passed and correctly
@@ -93,13 +99,15 @@ No result should receive a validated grade solely because a solver completed.
   application fullscreen, simulator Focus mode, adjustable stage controls,
   powered-flight precheck, fitted-surface axis checks, separate propeller power,
   custom propeller key capture, disabled automatic modes during direct-motor
-  control, and per-part live pressure/lift/drag table were exercised in the
-  in-app browser. The browser
+  control, manual motor-off glide, propulsion-gated automatic modes, basic-part
+  library, direct 3D move/turn handles, normal numeric replacement, hover/focus
+  help with non-pinning clicks, the 1040-by-700 layout, and per-part live
+  pressure/lift/drag table were exercised in the in-app browser. The browser
   control surface cannot attach a real local file or physical gamepad; file
   parsing and commit preconditions are covered by unit tests and the native
   archive layer by Rust tests. A real transmitter/gamepad compatibility matrix
   remains release-qualification evidence.
-- Build note: Vite reports a 1.41 MB initial JavaScript chunk (389 kB gzip), driven
+- Build note: Vite reports a 1.54 MB initial JavaScript chunk (423 kB gzip), driven
   primarily by the native 3D stack. Format loaders are split into separate dynamic
   chunks. Further 3D workspace lazy loading remains a measured performance task;
   it does not affect the local bundle's integrity.

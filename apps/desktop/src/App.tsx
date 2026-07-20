@@ -800,9 +800,6 @@ export default function App() {
     if (!project.vehicle.components.some((component) => (component.mass?.valueKg ?? 0) > 0)) {
       return { analysis: null, reason: "Add the real weight to at least one part." };
     }
-    if (project.vehicle.batteries.length === 0) {
-      return { analysis: null, reason: "Add a battery before running flight calculations." };
-    }
     try {
       return {
         analysis: runRapidAnalysis(project, analysisOptions, geometryAssets),

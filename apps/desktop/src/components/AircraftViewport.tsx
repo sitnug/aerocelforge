@@ -1,8 +1,8 @@
-import { Line, OrbitControls } from "@react-three/drei";
+import { Line, OrbitControls, TransformControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import type { AerocelProject, VehicleComponent } from "@aerocel/simulation-schema";
 import type { TriangleMesh } from "@aerocel/geometry-core";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { halfSurfaceSpanDirection } from "../lib/aircraftPresentation";
 
@@ -28,6 +28,11 @@ interface AircraftViewportProps {
   readonly flightPose?: FlightViewportPose;
   readonly motorTiltRad?: number;
   readonly controlSurfaceDeflections?: ReadonlyMap<string, number>;
+  readonly transformMode?: "translate" | "rotate";
+  readonly onTransformChange?: (
+    componentId: string,
+    transform: VehicleComponent["transform"]
+  ) => void;
 }
 
 export interface FlightViewportPose {
@@ -135,6 +140,7 @@ interface SelectableProps {
   readonly children: React.ReactNode;
   readonly position?: [number, number, number];
   readonly rotation?: [number, number, number];
+  readonly scale?: [number, number, number];
 }
 
 const PartContextMenuContext = createContext<
@@ -147,7 +153,8 @@ function Selectable({
   onSelect,
   children,
   position,
-  rotation
+  rotation,
+  scale
 }: SelectableProps) {
   const [hovered, setHovered] = useState(false);
   const onPartContextMenu = useContext(PartContextMenuContext);
@@ -161,6 +168,11 @@ function Selectable({
     event.stopPropagation();
     onSelect(component.id);
   };
+  const emphasisScale = selected ? 1.018 : hovered ? 1.008 : 1;
+  const renderedScale: number | [number, number, number] =
+    scale === undefined
+      ? emphasisScale
+      : [scale[0] * emphasisScale, scale[1] * emphasisScale, scale[2] * emphasisScale];
   return (
     <group
       {...(position === undefined ? {} : { position })}
@@ -178,7 +190,7 @@ function Selectable({
         setHovered(true);
       }}
       onPointerOut={() => setHovered(false)}
-      scale={selected ? 1.018 : hovered ? 1.008 : 1}
+      scale={renderedScale}
     >
       {children}
       {selected && <pointLight color="#55e8c3" intensity={0.45} distance={0.6} />}
@@ -246,6 +258,7 @@ function SurfaceMesh({
   const rotation: [number, number, number] = isVertical
     ? [roll, -yaw - deflectionRad, pitch]
     : [roll, -yaw, pitch + deflectionRad];
+  const [scaleX, scaleY, scaleZ] = component.transform.scale;
   return (
     <Selectable
       component={component}
@@ -253,6 +266,7 @@ function SurfaceMesh({
       onSelect={onSelect}
       position={position}
       rotation={rotation}
+      scale={[scaleX, scaleZ, scaleY]}
     >
       {geometries.map((geometry, index) => (
         <mesh key={index} geometry={geometry} castShadow receiveShadow>
@@ -350,6 +364,10 @@ function ComponentMesh({
   readonly controlDeflectionRad: number;
 }) {
   const [x, y, z] = bodyToScene(component.transform.translationM);
+  const [roll, pitch, yaw] = component.transform.rotationRad;
+  const [scaleX, scaleY, scaleZ] = component.transform.scale;
+  const sceneRotation: [number, number, number] = [roll, -yaw, pitch];
+  const sceneScale: [number, number, number] = [scaleX, scaleZ, scaleY];
   const commonMaterial = (
     <meshStandardMaterial
       color={selected ? "#77f2d2" : component.visual.color}
@@ -380,6 +398,8 @@ function ComponentMesh({
         selected={selected}
         onSelect={onSelect}
         position={[x, y, z]}
+        rotation={sceneRotation}
+        scale={sceneScale}
       >
         <mesh rotation={[0, 0, Math.PI / 2]} castShadow receiveShadow>
           <capsuleGeometry args={[0.14, 1.14, 12, 32]} />
@@ -426,7 +446,8 @@ function ComponentMesh({
         selected={selected}
         onSelect={onSelect}
         position={[x, y, z]}
-        rotation={[0, 0, tiltRad]}
+        rotation={[roll, -yaw, pitch + tiltRad]}
+        scale={sceneScale}
       >
         <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
           <cylinderGeometry args={[0.05, 0.065, 0.15, 24]} />
@@ -472,7 +493,8 @@ function ComponentMesh({
         selected={selected}
         onSelect={onSelect}
         position={[x, y, z]}
-        rotation={[0, 0, propTilt]}
+        rotation={[roll, -yaw, pitch + propTilt]}
+        scale={sceneScale}
       >
         <mesh rotation={[0, Math.PI / 2, 0]}>
           <circleGeometry
@@ -511,6 +533,8 @@ function ComponentMesh({
         selected={selected}
         onSelect={onSelect}
         position={[x, y, z]}
+        rotation={sceneRotation}
+        scale={sceneScale}
       >
         <mesh castShadow>
           <boxGeometry args={[dimensions[0], dimensions[2], dimensions[1]]} />
@@ -519,7 +543,79 @@ function ComponentMesh({
       </Selectable>
     );
   }
-  return null;
+  const dimensions = component.geometry.boundingBoxM;
+  return (
+    <Selectable
+      component={component}
+      selected={selected}
+      onSelect={onSelect}
+      position={[x, y, z]}
+      rotation={sceneRotation}
+      scale={sceneScale}
+    >
+      <mesh castShadow receiveShadow>
+        <boxGeometry
+          args={[
+            Math.max(dimensions[0], 0.01),
+            Math.max(dimensions[2], 0.01),
+            Math.max(dimensions[1], 0.01)
+          ]}
+        />
+        {commonMaterial}
+      </mesh>
+    </Selectable>
+  );
+}
+
+function SelectedPartTransform({
+  component,
+  mode,
+  onTransformChange
+}: {
+  readonly component: VehicleComponent;
+  readonly mode: "translate" | "rotate";
+  readonly onTransformChange: NonNullable<AircraftViewportProps["onTransformChange"]>;
+}) {
+  const objectRef = useRef<THREE.Group>(null);
+  const dragging = useRef(false);
+
+  useEffect(() => {
+    if (dragging.current || objectRef.current === null) return;
+    const [x, y, z] = bodyToScene(component.transform.translationM);
+    const [roll, pitch, yaw] = component.transform.rotationRad;
+    objectRef.current.position.set(x, y, z);
+    objectRef.current.rotation.set(roll, -yaw, pitch);
+    objectRef.current.updateMatrixWorld();
+  }, [component.transform.rotationRad, component.transform.translationM]);
+
+  const publishTransform = (): void => {
+    const object = objectRef.current;
+    if (object === null) return;
+    const clean = (value: number): number => (Math.abs(value) < 1e-10 ? 0 : value);
+    onTransformChange(component.id, {
+      ...component.transform,
+      translationM: [clean(object.position.x), clean(object.position.z), clean(-object.position.y)],
+      rotationRad: [clean(object.rotation.x), clean(object.rotation.z), clean(-object.rotation.y)]
+    });
+  };
+
+  return (
+    <TransformControls
+      mode={mode}
+      space={mode === "translate" ? "world" : "local"}
+      size={0.78}
+      onMouseDown={() => {
+        dragging.current = true;
+      }}
+      onMouseUp={() => {
+        dragging.current = false;
+        publishTransform();
+      }}
+      onObjectChange={publishTransform}
+    >
+      <group ref={objectRef} />
+    </TransformControls>
+  );
 }
 
 function Scene({
@@ -532,7 +628,9 @@ function Scene({
   flightPose,
   motorTiltRad,
   controlSurfaceDeflections,
-  onPartContextMenu
+  onPartContextMenu,
+  transformMode,
+  onTransformChange
 }: AircraftViewportProps) {
   const motorTilt = new Map(
     project.vehicle.joints.map((joint) => [joint.childComponentId, joint.actualRad] as const)
@@ -546,6 +644,9 @@ function Scene({
     flightPose === undefined ? ([0, 0, 0] as const) : bodyToScene(flightPose.positionNedM);
   const vehicleQuaternion =
     flightPose === undefined ? undefined : attitudeToSceneQuaternion(flightPose.attitudeBodyToNed);
+  const selectedComponent = project.vehicle.components.find(
+    (component) => component.id === selectedId
+  );
   return (
     <>
       <color attach="background" args={["#101714"]} />
@@ -615,6 +716,16 @@ function Scene({
                 controlDeflectionRad={controlSurfaceDeflections?.get(component.id) ?? 0}
               />
             ))}
+          {flightPose === undefined &&
+            selectedComponent !== undefined &&
+            transformMode !== undefined &&
+            onTransformChange !== undefined && (
+              <SelectedPartTransform
+                component={selectedComponent}
+                mode={transformMode}
+                onTransformChange={onTransformChange}
+              />
+            )}
           {options.showCg && (
             <group position={bodyToScene(cgBodyM)}>
               <mesh>

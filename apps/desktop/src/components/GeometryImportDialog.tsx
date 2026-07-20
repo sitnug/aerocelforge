@@ -328,8 +328,9 @@ export function GeometryImportDialog({
               <span className="inline-help-label">
                 File type
                 <InfoTip label="File type">
-                  Keep “Choose automatically” unless the file has the wrong or missing ending.
-                  Aerocel Forge still checks the file before using it.
+                  {selectedDefinition === null
+                    ? "Keep “Choose automatically” unless the file has the wrong or missing ending. Aerocel Forge still checks the contents before using it."
+                    : `${selectedDefinition.description} Required support: ${selectedDefinition.capability}.`}
                 </InfoTip>
               </span>
               <select

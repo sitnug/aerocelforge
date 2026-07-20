@@ -23,8 +23,9 @@ results. `Cmd+K` opens screen navigation.
 The default **Bright** theme uses a light background, dark words, and high-contrast
 buttons. **Cockpit** uses dark panels with green and amber details. Choose either
 theme from the top bar or Settings. Small `i` controls explain unfamiliar terms in
-plain language; hover, focus, or click them to open the help card. Theme and skill
-level choices are saved on this computer and never change the aircraft model.
+plain language. Hover over one with the mouse, or focus it with the keyboard, to
+show its help card. A mouse click does not leave the card pinned open. Theme and
+skill level choices are saved on this computer and never change the aircraft model.
 
 ## Geometry and components
 
@@ -41,6 +42,15 @@ and embedded-geometry DAE. Confirm the metre bounding box and source axes before
 can be translated, rotated, non-uniformly scaled, reparented, retyped, or excluded
 from CFD in the inspector. The untouched source is archived by SHA-256 and is
 restored with the project at startup.
+
+Open **Parts → Add basic part** to add an editable body block, wing, aileron,
+elevator, rudder, battery, motor, or propeller without importing a file. Select
+the part in **3D model**. Use **Move** and drag a coloured arrow, or choose
+**Turn** and drag a curved ring. The position and turn number boxes update with
+the 3D handles. Clicking a number selects its old value, so typing replaces the
+starting zero instead of stepping by 0.01. The next unconnected motor and
+propeller pair automatically. A lone motor or propeller remains only a shape and
+cannot make thrust.
 
 To edit a part, right-click it in the 3D view, the left navigator, or the Parts
 table and choose **Edit part**. To remove a part, select it and press **Delete** or
@@ -106,8 +116,11 @@ aileron/elevon/flaperon parts, and Z/X moves a real rudder. If a matching movabl
 part is absent, that axis does nothing. Shift/Ctrl changes combined throttle,
 Q/E changes motor tilt, and Space starts or pauses the fixed-step simulation.
 Choose **Individual propellers** to give each propeller its own increase/decrease
-keys and power setting. Powered Fly remains locked without a usable propeller
-setup and charged battery; the separate glide test keeps all motors at zero.
+keys and power setting. Without a usable propeller setup and charged battery, the
+main action changes to **Start glide** and keeps all motors at zero. Manual surface
+controls and wind still work. Stabilize, Altitude Hold, Return Home, powered
+targets, propeller controls, and Hover start stay disabled until propulsion is
+usable.
 Live telemetry includes
 attitude, airspeed, altitude, wind-relative aerodynamic state, forces, power,
 position, trail, and battery use.

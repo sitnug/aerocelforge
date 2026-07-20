@@ -76,7 +76,8 @@ export function applyComponentDeletion(
       joints: project.vehicle.joints.filter((joint) => !jointIds.has(joint.id)),
       propulsionUnits: project.vehicle.propulsionUnits.filter(
         (unit) => !propulsionUnitIds.has(unit.id)
-      )
+      ),
+      batteries: project.vehicle.batteries.filter((battery) => !componentIds.has(battery.id))
     }
   };
 }
