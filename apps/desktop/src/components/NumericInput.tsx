@@ -105,6 +105,14 @@ export function NumericInput({
       disabled={disabled}
       aria-label={ariaLabel}
       aria-invalid={ariaInvalid}
+      onMouseDown={(event) => {
+        if (document.activeElement === event.currentTarget) return;
+
+        // Keep the first click from moving the caret beside the selected value.
+        event.preventDefault();
+        event.currentTarget.focus();
+        event.currentTarget.select();
+      }}
       onFocus={(event) => {
         focused.current = true;
         event.currentTarget.select();

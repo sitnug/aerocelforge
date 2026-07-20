@@ -1,7 +1,15 @@
 import type { AerocelProject, ComponentType, VehicleComponent } from "@aerocel/simulation-schema";
 
 export type BasicPartKind =
-  "body_block" | "wing" | "aileron" | "elevator" | "rudder" | "battery" | "motor" | "propeller";
+  | "body_block"
+  | "wing"
+  | "aileron"
+  | "elevator"
+  | "rudder"
+  | "battery"
+  | "motor_propeller"
+  | "motor"
+  | "propeller";
 
 export interface BasicPartDefinition {
   readonly kind: BasicPartKind;
@@ -83,11 +91,21 @@ export const BASIC_PART_LIBRARY: readonly BasicPartDefinition[] = [
     }
   },
   {
+    kind: "motor_propeller",
+    label: "Motor + propeller",
+    description: "A small matched motor and propeller that is ready to set up and fly.",
+    type: "motor",
+    boundingBoxM: [0.07, 0.045, 0.045],
+    color: "#d3a25a",
+    cfdIncluded: false,
+    properties: {}
+  },
+  {
     kind: "motor",
     label: "Motor",
     description: "A simple motor body. It pairs with the next unconnected propeller.",
     type: "motor",
-    boundingBoxM: [0.11, 0.075, 0.075],
+    boundingBoxM: [0.07, 0.045, 0.045],
     color: "#d3a25a",
     cfdIncluded: false,
     properties: {
@@ -126,6 +144,73 @@ export function addBasicPart(
   kind: BasicPartKind,
   componentId = crypto.randomUUID()
 ): AerocelProject {
+  if (kind === "motor_propeller") {
+    const withMotor = addBasicPart(project, "motor", componentId);
+    const propellerId = crypto.randomUUID();
+    const provisional = addBasicPart(withMotor, "propeller", propellerId);
+    const motor = provisional.vehicle.components.find((item) => item.id === componentId);
+    const propeller = provisional.vehicle.components.find((item) => item.id === propellerId);
+    if (motor === undefined || propeller === undefined) return provisional;
+
+    const propulsionUnits = provisional.vehicle.propulsionUnits.filter(
+      (unit) => unit.motorComponentId !== componentId && unit.propellerComponentId !== propellerId
+    );
+    const unitNumber = propulsionUnits.length + 1;
+    const propulsionUnit = {
+      id: crypto.randomUUID(),
+      name: `Propulsion ${unitNumber}`,
+      motorComponentId: componentId,
+      propellerComponentId: propellerId,
+      jointId: null,
+      fidelity: "P0" as const,
+      rotation: unitNumber % 2 === 1 ? ("CW" as const) : ("CCW" as const),
+      configuration: "tractor" as const,
+      axisLocal: [1, 0, 0] as [number, number, number],
+      diameterM: 0.3,
+      pitchM: 0.12,
+      bladeCount: 2,
+      motor: {
+        kvRpmPerVolt: 700,
+        windingResistanceOhm: 0.06,
+        noLoadCurrentA: 1,
+        maxCurrentA: 30,
+        maxPowerW: 600,
+        responseTimeS: 0.12,
+        provenance: "user_entered" as const
+      }
+    };
+    const motorNumber =
+      project.vehicle.components.filter((component) => component.type === "motor").length + 1;
+    const motorPosition = motor.transform.translationM;
+    return {
+      ...provisional,
+      vehicle: {
+        ...provisional.vehicle,
+        components: provisional.vehicle.components.map((component) => {
+          if (component.id === componentId) {
+            return {
+              ...component,
+              name: `Motor + propeller ${motorNumber}`,
+              properties: { ...component.properties, basicPartKind: kind }
+            };
+          }
+          if (component.id === propellerId) {
+            return {
+              ...component,
+              name: `Propeller ${motorNumber}`,
+              parentId: componentId,
+              transform: {
+                ...component.transform,
+                translationM: [motorPosition[0] + 0.045, motorPosition[1], motorPosition[2]]
+              }
+            };
+          }
+          return component;
+        }),
+        propulsionUnits: [...propulsionUnits, propulsionUnit]
+      }
+    };
+  }
   const definition = BASIC_PART_LIBRARY.find((candidate) => candidate.kind === kind);
   if (definition === undefined) throw new Error(`Unknown basic part: ${kind}`);
   const name = nextPartName(project, definition);

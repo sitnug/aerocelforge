@@ -44,14 +44,22 @@ from CFD in the inspector. The untouched source is archived by SHA-256 and is
 restored with the project at startup.
 
 Open **Parts → Add basic part** to add an editable body block, wing, aileron,
-elevator, rudder, battery, motor, or propeller without importing a file. Select
+elevator, rudder, battery, small motor, propeller, or connected **Motor + propeller**
+without importing a file. Select
 the part in **3D model**. In **Move**, drag the part itself, a coloured arrow, or
 a coloured square between two arrows. Choose **Rotate** and drag a coloured
-curved arc. The position and rotation boxes update with the 3D handles. Press
-`M` for Move or `R` for Rotate. Clicking a number selects its old value, so typing
-replaces the starting zero instead of stepping by 0.01. The next unconnected motor and
-propeller pair automatically. A lone motor or propeller remains only a shape and
-cannot make thrust.
+curved arc. Choose **Scale** and drag a coloured cube to resize one direction or
+the centre cube to resize all directions. The number boxes update with the 3D
+handles. Press `M` for Move, `R` for Rotate, or `S` for Scale. Clicking a number
+keeps its old value selected through the first mouse click, so typing replaces the
+starting zero instead of appending to it. The next unconnected motor and propeller
+pair automatically. A lone motor or propeller remains only a shape and cannot make
+thrust.
+
+Outside a text box, `Command-Z` undoes an aircraft change and `Shift-Command-Z`
+redoes it. Select a part and use `Command-C` and `Command-V` to copy and paste it.
+Attached child parts and their matching joint, battery, or propulsion setup are
+copied together. Windows and Linux use Ctrl in place of Command.
 
 To edit a part, right-click it in the 3D view, the left navigator, or the Parts
 table and choose **Edit part**. To remove a part, select it and press **Delete** or

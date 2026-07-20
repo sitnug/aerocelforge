@@ -31,6 +31,12 @@ fullscreen button separately toggles the whole native window or browser view.
 The native macOS window can also be resized normally and has a supported minimum
 size of 1040 by 700 pixels.
 
+Drag anywhere in the 3D flight view to rotate the camera around the aircraft and
+scroll to zoom. The camera keeps following the moving aircraft without discarding
+the angle you chose. Powered procedural propeller blades spin while flying, and motor and
+propeller geometry follows the live tilt angle, including a propeller used without
+a separate visible motor shape.
+
 The left stick asks for rudder/yaw and throttle. The right stick asks for bank
 and pitch. These channels do not create invisible moments: pitch needs an
 elevator, elevon, or movable canard; bank needs ailerons, elevons, or flaperons;

@@ -34,7 +34,15 @@ import {
   X,
   type LucideIcon
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type Dispatch,
+  type SetStateAction
+} from "react";
 import { runRapidAnalysis, defaultAnalysisOptions, type AnalysisOptions } from "./lib/analysis";
 import { inspectGeometryFile } from "./lib/importers";
 import {
@@ -65,6 +73,11 @@ import {
 import { readAdvancedPreference, readThemePreference, type AppTheme } from "./lib/preferences";
 import "./styles.css";
 import { ProjectManagerDialog } from "./components/ProjectManagerDialog";
+import {
+  copyComponentTree,
+  pasteComponentTree,
+  type ComponentClipboard
+} from "./lib/componentClipboard";
 
 export type WorkspaceId =
   | "home"
@@ -726,7 +739,7 @@ function SetupWizard({
 }
 
 export default function App() {
-  const [project, setProject] = useState<AerocelProject>(() =>
+  const [project, setProjectState] = useState<AerocelProject>(() =>
     createBlankProject("Untitled aircraft")
   );
   const [geometryAssets, setGeometryAssets] = useState<ReadonlyMap<string, TriangleMesh>>(
@@ -759,6 +772,59 @@ export default function App() {
   const [advancedMode, setAdvancedMode] = useState(readAdvancedPreference);
   const [partContextMenu, setPartContextMenu] = useState<PartContextMenuState | null>(null);
   const [deleteRequestId, setDeleteRequestId] = useState<string | null>(null);
+  const projectRef = useRef(project);
+  const undoStack = useRef<AerocelProject[]>([]);
+  const redoStack = useRef<AerocelProject[]>([]);
+  const lastHistoryChangeMs = useRef(0);
+  const partClipboard = useRef<ComponentClipboard | null>(null);
+
+  const setProject = useCallback<Dispatch<SetStateAction<AerocelProject>>>((update) => {
+    const current = projectRef.current;
+    const next = typeof update === "function" ? update(current) : update;
+    if (next === current) return;
+    const now = performance.now();
+    if (now - lastHistoryChangeMs.current > 350) {
+      undoStack.current.push(current);
+      if (undoStack.current.length > 100) undoStack.current.shift();
+    }
+    lastHistoryChangeMs.current = now;
+    redoStack.current = [];
+    projectRef.current = next;
+    setProjectState(next);
+  }, []);
+
+  const clearProjectHistory = useCallback((): void => {
+    undoStack.current = [];
+    redoStack.current = [];
+    lastHistoryChangeMs.current = 0;
+    partClipboard.current = null;
+  }, []);
+
+  const undoProject = useCallback((): void => {
+    const previous = undoStack.current.pop();
+    if (previous === undefined) {
+      setToast("Nothing to undo yet.");
+      return;
+    }
+    redoStack.current.push(projectRef.current);
+    lastHistoryChangeMs.current = 0;
+    projectRef.current = previous;
+    setProjectState(previous);
+    setToast("Undid the last aircraft change.");
+  }, []);
+
+  const redoProject = useCallback((): void => {
+    const next = redoStack.current.pop();
+    if (next === undefined) {
+      setToast("Nothing to redo yet.");
+      return;
+    }
+    undoStack.current.push(projectRef.current);
+    lastHistoryChangeMs.current = 0;
+    projectRef.current = next;
+    setProjectState(next);
+    setToast("Redid the aircraft change.");
+  }, []);
 
   const visibleWorkspaces = useMemo(
     () => workspaces.filter((workspace) => advancedMode || workspace.advanced !== true),
@@ -892,6 +958,60 @@ export default function App() {
 
   useEffect(() => {
     const handler = (event: KeyboardEvent): void => {
+      const shortcut = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      const editingText = isTextEntryTarget(event.target);
+      const aircraftShortcutAvailable =
+        projectReady &&
+        !projectManagerOpen &&
+        !setupOpen &&
+        !geometryImportOpen &&
+        !commandOpen &&
+        deleteRequestId === null;
+      if (shortcut && key === "z" && !editingText && aircraftShortcutAvailable) {
+        event.preventDefault();
+        if (event.shiftKey) redoProject();
+        else undoProject();
+        return;
+      }
+      if (
+        shortcut &&
+        key === "c" &&
+        !editingText &&
+        aircraftShortcutAvailable &&
+        selectedId !== null
+      ) {
+        const copied = copyComponentTree(project, selectedId);
+        if (copied !== null) {
+          event.preventDefault();
+          partClipboard.current = copied;
+          setToast(
+            copied.components.length === 1
+              ? "Part copied. Press Command-V to paste it."
+              : `${copied.components.length} connected parts copied. Press Command-V to paste them.`
+          );
+        }
+        return;
+      }
+      if (
+        shortcut &&
+        key === "v" &&
+        !editingText &&
+        aircraftShortcutAvailable &&
+        partClipboard.current !== null
+      ) {
+        event.preventDefault();
+        const pasted = pasteComponentTree(project, partClipboard.current);
+        setProject(pasted.project);
+        setSelectedId(pasted.selectedId);
+        setActiveWorkspace("geometry");
+        setToast(
+          pasted.componentCount === 1
+            ? "Part pasted and selected."
+            : `${pasted.componentCount} connected parts pasted and selected.`
+        );
+        return;
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "n") {
         event.preventDefault();
         setProjectManagerOpen(true);
@@ -956,8 +1076,12 @@ export default function App() {
     geometryImportOpen,
     project,
     projectManagerOpen,
+    projectReady,
+    redoProject,
     selectedId,
-    setupOpen
+    setProject,
+    setupOpen,
+    undoProject
   ]);
 
   useEffect(() => {
@@ -1038,7 +1162,9 @@ export default function App() {
     );
     await saveProject(fileName, blank);
     setProjectReady(false);
-    setProject(blank);
+    clearProjectHistory();
+    projectRef.current = blank;
+    setProjectState(blank);
     setGeometryAssets(new Map());
     setSelectedId(null);
     setActiveProjectFileName(fileName);
@@ -1059,7 +1185,9 @@ export default function App() {
     const restored = await loadProject(fileName);
     const restoredAssets = await loadProjectGeometry(restored);
     setProjectReady(false);
-    setProject(restored);
+    clearProjectHistory();
+    projectRef.current = restored;
+    setProjectState(restored);
     setGeometryAssets(restoredAssets);
     setSelectedId(restored.vehicle.components[0]?.id ?? null);
     setActiveProjectFileName(fileName);

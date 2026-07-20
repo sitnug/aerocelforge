@@ -31,4 +31,19 @@ describe("basic parts", () => {
     });
     expect(() => parseProject(paired)).not.toThrow();
   });
+
+  it("adds a small connected motor and propeller in one step", () => {
+    const motorId = "f351282c-577f-45cd-8770-9631468f46c6";
+    const project = addBasicPart(createBlankProject("Combined motor"), "motor_propeller", motorId);
+
+    expect(project.vehicle.components).toHaveLength(2);
+    expect(project.vehicle.components[0]).toMatchObject({
+      id: motorId,
+      name: "Motor + propeller 1",
+      geometry: { boundingBoxM: [0.07, 0.045, 0.045] }
+    });
+    expect(project.vehicle.components[1]?.parentId).toBe(motorId);
+    expect(project.vehicle.propulsionUnits[0]).toMatchObject({ motorComponentId: motorId });
+    expect(() => parseProject(project)).not.toThrow();
+  });
 });

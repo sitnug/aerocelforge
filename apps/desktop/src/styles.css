@@ -5245,6 +5245,22 @@ kbd {
   min-height: 0;
 }
 
+.flight-camera-help {
+  position: absolute;
+  z-index: 2;
+  right: 14px;
+  bottom: 14px;
+  padding: 6px 9px;
+  border: 1px solid rgb(85 232 195 / 20%);
+  border-radius: 6px;
+  background: rgb(10 17 15 / 78%);
+  color: #c5d8d2;
+  pointer-events: none;
+  font-size: 10px;
+  font-weight: 700;
+  backdrop-filter: blur(8px);
+}
+
 .flight-hud {
   position: absolute;
   z-index: 2;

@@ -2,8 +2,9 @@ import { DragControls, Line, OrbitControls, PivotControls } from "@react-three/d
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import type { AerocelProject, VehicleComponent } from "@aerocel/simulation-schema";
 import type { TriangleMesh } from "@aerocel/geometry-core";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
+import type { OrbitControls as OrbitControlsImpl } from "three-stdlib";
 import { halfSurfaceSpanDirection } from "../lib/aircraftPresentation";
 import {
   applySceneTransformMatrix,
@@ -31,8 +32,9 @@ interface AircraftViewportProps {
   readonly geometryAssets?: ReadonlyMap<string, TriangleMesh>;
   readonly flightPose?: FlightViewportPose;
   readonly motorTiltRad?: number;
+  readonly spinningPropellerIds?: ReadonlySet<string>;
   readonly controlSurfaceDeflections?: ReadonlyMap<string, number>;
-  readonly transformMode?: "translate" | "rotate";
+  readonly transformMode?: "translate" | "rotate" | "scale";
   readonly onTransformChange?: (
     componentId: string,
     transform: VehicleComponent["transform"]
@@ -60,25 +62,37 @@ const attitudeToSceneQuaternion = (
 
 function FlightCameraRig({ pose }: { readonly pose: FlightViewportPose }) {
   const { camera } = useThree();
-  const desiredPosition = useMemo(() => new THREE.Vector3(), []);
-  const lookTarget = useMemo(() => new THREE.Vector3(), []);
-  const sceneQuaternion = useMemo(() => new THREE.Quaternion(), []);
+  const controls = useRef<OrbitControlsImpl>(null);
   const localOffset = useMemo(() => new THREE.Vector3(-5.2, 2.4, 4.2), []);
-  const localLookAhead = useMemo(() => new THREE.Vector3(1.5, 0.15, 0), []);
   const vehiclePosition = useMemo(() => new THREE.Vector3(), []);
-  useFrame((_, delta) => {
+  const previousVehiclePosition = useMemo(() => new THREE.Vector3(), []);
+  const vehicleMovement = useMemo(() => new THREE.Vector3(), []);
+  const initialized = useRef(false);
+  useFrame(() => {
     const position = bodyToScene(pose.positionNedM);
-    const [qx, qy, qz, qw] = attitudeToSceneQuaternion(pose.attitudeBodyToNed);
-    sceneQuaternion.set(qx, qy, qz, qw);
-    desiredPosition.copy(localOffset).applyQuaternion(sceneQuaternion);
     vehiclePosition.set(...position);
-    desiredPosition.add(vehiclePosition);
-    lookTarget.copy(localLookAhead).applyQuaternion(sceneQuaternion);
-    lookTarget.add(vehiclePosition);
-    camera.position.lerp(desiredPosition, 1 - Math.exp(-delta * 3.5));
-    camera.lookAt(lookTarget);
+    if (!initialized.current) {
+      camera.position.copy(vehiclePosition).add(localOffset);
+      initialized.current = true;
+    } else {
+      vehicleMovement.copy(vehiclePosition).sub(previousVehiclePosition);
+      camera.position.add(vehicleMovement);
+    }
+    previousVehiclePosition.copy(vehiclePosition);
+    controls.current?.target.copy(vehiclePosition);
+    controls.current?.update();
   });
-  return null;
+  return (
+    <OrbitControls
+      ref={controls}
+      makeDefault
+      enableDamping
+      dampingFactor={0.08}
+      minDistance={1.2}
+      maxDistance={24}
+      enablePan={false}
+    />
+  );
 }
 
 function taperedPrism(
@@ -292,12 +306,14 @@ function ImportedComponentMesh({
   component,
   mesh,
   selected,
-  onSelect
+  onSelect,
+  tiltRad = 0
 }: {
   readonly component: VehicleComponent;
   readonly mesh: TriangleMesh | null;
   readonly selected: boolean;
   readonly onSelect: (id: string) => void;
+  readonly tiltRad?: number;
 }) {
   const geometry = useMemo(() => {
     if (mesh === null) return null;
@@ -318,8 +334,13 @@ function ImportedComponentMesh({
   const position = bodyToScene(component.transform.translationM);
   const [roll, pitch, yaw] = component.transform.rotationRad;
   const [scaleX, scaleY, scaleZ] = component.transform.scale;
+  const tiltsWithRotor = component.type === "motor" || component.type === "propeller";
   return (
-    <group position={position} rotation={[roll, -yaw, pitch]} scale={[scaleX, scaleZ, scaleY]}>
+    <group
+      position={position}
+      rotation={[roll, -yaw, pitch + (tiltsWithRotor ? tiltRad : 0)]}
+      scale={[scaleX, scaleZ, scaleY]}
+    >
       <Selectable component={component} selected={selected} onSelect={onSelect}>
         {geometry === null ? (
           <mesh castShadow receiveShadow>
@@ -357,7 +378,8 @@ function ComponentMesh({
   tiltRad,
   options,
   importedMesh,
-  controlDeflectionRad
+  controlDeflectionRad,
+  spinPropeller
 }: {
   readonly component: VehicleComponent;
   readonly selected: boolean;
@@ -366,6 +388,7 @@ function ComponentMesh({
   readonly options: ViewportOptions;
   readonly importedMesh: TriangleMesh | null;
   readonly controlDeflectionRad: number;
+  readonly spinPropeller: boolean;
 }) {
   const [x, y, z] = bodyToScene(component.transform.translationM);
   const [roll, pitch, yaw] = component.transform.rotationRad;
@@ -391,6 +414,7 @@ function ComponentMesh({
         mesh={importedMesh}
         selected={selected}
         onSelect={onSelect}
+        tiltRad={tiltRad}
       />
     );
   }
@@ -444,6 +468,8 @@ function ComponentMesh({
     );
   }
   if (component.type === "motor") {
+    const [motorLength, motorWidth, motorHeight] = component.geometry.boundingBoxM;
+    const motorRadius = Math.max(0.008, Math.min(motorWidth, motorHeight) / 2);
     return (
       <Selectable
         component={component}
@@ -454,7 +480,9 @@ function ComponentMesh({
         scale={sceneScale}
       >
         <mesh rotation={[0, 0, Math.PI / 2]} castShadow>
-          <cylinderGeometry args={[0.05, 0.065, 0.15, 24]} />
+          <cylinderGeometry
+            args={[motorRadius * 0.82, motorRadius, Math.max(0.02, motorLength), 24]}
+          />
           {commonMaterial}
         </mesh>
         {options.showThrust && (
@@ -489,21 +517,18 @@ function ComponentMesh({
     );
   }
   if (component.type === "propeller") {
-    const parentMotor = component.parentId;
-    const propTilt = parentMotor === null ? 0 : tiltRad;
+    const propellerDiameter = (component.properties.diameterM as number | undefined) ?? 0.43;
     return (
       <Selectable
         component={component}
         selected={selected}
         onSelect={onSelect}
         position={[x, y, z]}
-        rotation={[roll, -yaw, pitch + propTilt]}
+        rotation={[roll, -yaw, pitch + tiltRad]}
         scale={sceneScale}
       >
         <mesh rotation={[0, Math.PI / 2, 0]}>
-          <circleGeometry
-            args={[((component.properties.diameterM as number | undefined) ?? 0.43) / 2, 48]}
-          />
+          <circleGeometry args={[propellerDiameter / 2, 48]} />
           <meshBasicMaterial
             color={selected ? "#8affe0" : component.visual.color}
             transparent
@@ -512,16 +537,7 @@ function ComponentMesh({
             depthWrite={false}
           />
         </mesh>
-        <mesh rotation={[0, 0, Math.PI / 4]}>
-          <boxGeometry
-            args={[
-              0.018,
-              0.012,
-              ((component.properties.diameterM as number | undefined) ?? 0.43) * 0.94
-            ]}
-          />
-          <meshStandardMaterial color="#60736d" roughness={0.45} />
-        </mesh>
+        <PropellerBlades diameterM={propellerDiameter} spinning={spinPropeller} />
         <mesh rotation={[Math.PI / 2, 0, 0]}>
           <cylinderGeometry args={[0.025, 0.025, 0.035, 18]} />
           <meshStandardMaterial color="#15211f" metalness={0.6} roughness={0.32} />
@@ -571,13 +587,34 @@ function ComponentMesh({
   );
 }
 
+function PropellerBlades({
+  diameterM,
+  spinning
+}: {
+  readonly diameterM: number;
+  readonly spinning: boolean;
+}) {
+  const blades = useRef<THREE.Group>(null);
+  useFrame((_, delta) => {
+    if (spinning && blades.current !== null) blades.current.rotation.x += delta * 28;
+  });
+  return (
+    <group ref={blades} rotation={[Math.PI / 4, 0, 0]}>
+      <mesh>
+        <boxGeometry args={[0.018, 0.012, diameterM * 0.94]} />
+        <meshStandardMaterial color="#60736d" roughness={0.45} />
+      </mesh>
+    </group>
+  );
+}
+
 function SelectedPartTransform({
   component,
   mode,
   onTransformChange
 }: {
   readonly component: VehicleComponent;
-  readonly mode: "translate" | "rotate";
+  readonly mode: "translate" | "rotate" | "scale";
   readonly onTransformChange: NonNullable<AircraftViewportProps["onTransformChange"]>;
 }) {
   const matrix = useMemo(() => {
@@ -605,7 +642,7 @@ function SelectedPartTransform({
       disableAxes={mode !== "translate"}
       disableSliders={mode !== "translate"}
       disableRotations={mode !== "rotate"}
-      disableScaling
+      disableScaling={mode !== "scale"}
       onDrag={publishTransform}
     >
       <group />
@@ -666,6 +703,7 @@ function Scene({
   geometryAssets,
   flightPose,
   motorTiltRad,
+  spinningPropellerIds,
   controlSurfaceDeflections,
   onPartContextMenu,
   transformMode,
@@ -753,6 +791,7 @@ function Scene({
                     : (geometryAssets?.get(component.geometry.sourceSha256) ?? null)
                 }
                 controlDeflectionRad={controlSurfaceDeflections?.get(component.id) ?? 0}
+                spinPropeller={spinningPropellerIds?.has(component.id) ?? false}
               />
             ))}
           {flightPose === undefined &&

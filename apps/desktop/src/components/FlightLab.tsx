@@ -971,6 +971,13 @@ export function FlightLab(props: FlightLabProps) {
             }
             geometryAssets={props.geometryAssets}
             motorTiltRad={flight.motorTiltRad}
+            spinningPropellerIds={
+              new Set(
+                running && canPoweredFlight
+                  ? model.propulsors.map((propulsor) => propulsor.propellerComponentId)
+                  : []
+              )
+            }
             controlSurfaceDeflections={controlSurfaceDeflections}
             flightPose={{
               positionNedM: flight.rigidBody.positionNedM,
@@ -978,6 +985,7 @@ export function FlightLab(props: FlightLabProps) {
               trailNedM: flight.trailNedM
             }}
           />
+          <div className="flight-camera-help">Drag to rotate camera · scroll to zoom</div>
           <div className="flight-hud flight-hud--top">
             <span>
               <small>AIRSPEED</small>

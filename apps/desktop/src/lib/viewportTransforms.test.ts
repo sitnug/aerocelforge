@@ -30,4 +30,12 @@ describe("viewport transform handles", () => {
       expect(value).toBeCloseTo(transform.rotationRad[index] ?? 0, 10)
     );
   });
+
+  it("round-trips each aircraft size through the scale handles", () => {
+    const matrix = componentTransformToSceneMatrix(transform, "scale");
+    const result = applySceneTransformMatrix(transform, matrix, "scale");
+    result.scale.forEach((value, index) =>
+      expect(value).toBeCloseTo(transform.scale[index] ?? 0, 10)
+    );
+  });
 });

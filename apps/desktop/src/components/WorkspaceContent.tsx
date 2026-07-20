@@ -298,7 +298,7 @@ function safeProjectBaseName(project: AerocelProject): string {
 
 function GeometryWorkspace(props: WorkspaceContentProps) {
   const selected = props.selectedComponent;
-  const [transformMode, setTransformMode] = useState<"translate" | "rotate">("translate");
+  const [transformMode, setTransformMode] = useState<"translate" | "rotate" | "scale">("translate");
   useEffect(() => {
     const chooseTransformMode = (event: KeyboardEvent): void => {
       if (selected === null || event.metaKey || event.ctrlKey || event.altKey) return;
@@ -310,6 +310,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
         return;
       if (event.key.toLowerCase() === "m") setTransformMode("translate");
       if (event.key.toLowerCase() === "r") setTransformMode("rotate");
+      if (event.key.toLowerCase() === "s") setTransformMode("scale");
     };
     window.addEventListener("keydown", chooseTransformMode);
     return () => window.removeEventListener("keydown", chooseTransformMode);
@@ -458,6 +459,16 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             >
               <Rotate3d size={15} /> Rotate
             </button>
+            <button
+              type="button"
+              className={`tool-button ${transformMode === "scale" ? "tool-button--active" : ""}`}
+              aria-pressed={transformMode === "scale"}
+              disabled={selected === null}
+              title="Resize the selected part with coloured handles"
+              onClick={() => setTransformMode("scale")}
+            >
+              <Scale size={15} /> Scale
+            </button>
           </div>
           <div className="tool-cluster">
             <button
@@ -554,15 +565,28 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
           {selected !== null && (
             <div className="viewport-edit-guide" role="status">
               <span className="viewport-edit-guide__heading">
-                {transformMode === "translate" ? <Move3d size={16} /> : <Rotate3d size={16} />}
+                {transformMode === "translate" ? (
+                  <Move3d size={16} />
+                ) : transformMode === "rotate" ? (
+                  <Rotate3d size={16} />
+                ) : (
+                  <Scale size={16} />
+                )}
                 <span>
                   <strong>
-                    {transformMode === "translate" ? "Move" : "Rotate"} {selected.name}
+                    {transformMode === "translate"
+                      ? "Move"
+                      : transformMode === "rotate"
+                        ? "Rotate"
+                        : "Scale"}{" "}
+                    {selected.name}
                   </strong>
                   <small>
                     {transformMode === "translate"
                       ? "Drag the part itself, an arrow, or a square between two arrows."
-                      : "Drag a coloured curved arc around the part."}
+                      : transformMode === "rotate"
+                        ? "Drag a coloured curved arc around the part."
+                        : "Drag a coloured cube to resize one direction or the centre cube for all directions."}
                   </small>
                 </span>
               </span>
@@ -573,16 +597,22 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                     <span className="axis-key axis-key--blue">Y · sideways</span>
                     <span className="axis-key axis-key--green">Z · up/down</span>
                   </>
-                ) : (
+                ) : transformMode === "rotate" ? (
                   <>
                     <span className="axis-key axis-key--red">Roll</span>
                     <span className="axis-key axis-key--blue">Pitch</span>
                     <span className="axis-key axis-key--green">Yaw</span>
                   </>
+                ) : (
+                  <>
+                    <span className="axis-key axis-key--red">X · length</span>
+                    <span className="axis-key axis-key--blue">Y · width</span>
+                    <span className="axis-key axis-key--green">Z · height</span>
+                  </>
                 )}
               </span>
               <small className="viewport-edit-guide__shortcut">
-                <kbd>M</kbd> Move <kbd>R</kbd> Rotate
+                <kbd>M</kbd> Move <kbd>R</kbd> Rotate <kbd>S</kbd> Scale
               </small>
             </div>
           )}
@@ -1077,9 +1107,7 @@ function ComponentsWorkspace(props: WorkspaceContentProps) {
     props.setProject((current) => addBasicPart(current, kind, componentId));
     props.onSelect(componentId);
     props.onNavigate("geometry");
-    props.notify(
-      `${label} added. Drag the arrows to move it or choose Rotate for the curved handles.`
-    );
+    props.notify(`${label} added. Use Move, Rotate, or Scale above the 3D view to place it.`);
   };
   return (
     <div className="scroll-workspace">
@@ -1128,7 +1156,9 @@ function ComponentsWorkspace(props: WorkspaceContentProps) {
                 <span className={`basic-part-library__icon basic-part-library__icon--${part.kind}`}>
                   {part.kind === "battery" ? (
                     <Battery size={19} />
-                  ) : part.kind === "motor" || part.kind === "propeller" ? (
+                  ) : part.kind === "motor" ||
+                    part.kind === "propeller" ||
+                    part.kind === "motor_propeller" ? (
                     <Fan size={19} />
                   ) : part.kind === "body_block" ? (
                     <Box size={19} />
