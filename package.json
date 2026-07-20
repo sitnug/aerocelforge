@@ -1,0 +1,43 @@
+{
+  "name": "aerocel-forge",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A reproducible aircraft and UAV engineering environment",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @aerocel/desktop",
+    "desktop": "npm run tauri --workspace @aerocel/desktop -- dev",
+    "build": "npm run build --workspaces --if-present",
+    "desktop:build": "npm run tauri --workspace @aerocel/desktop -- build && node scripts/finalize-macos-bundle.mjs",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint . --max-warnings 0",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build",
+    "python:check": "python3 -m compileall -q -x '(^|/)(\\.venv|venv|__pycache__)(/|$)' services/scientific-orchestrator && cd services/scientific-orchestrator && python3 -m unittest discover -s tests",
+    "python:lint": ".venv/bin/ruff check services/scientific-orchestrator",
+    "python:typecheck": "cd services/scientific-orchestrator && ../../.venv/bin/mypy aerocel_service",
+    "rust:check": "cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "rust:clippy": "cargo clippy --manifest-path apps/desktop/src-tauri/Cargo.toml --all-targets -- -D warnings"
+  },
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.32.0",
+    "@types/node": "^24.1.0",
+    "eslint": "^9.32.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.3.0",
+    "prettier": "^3.6.2",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.38.0"
+  }
+}

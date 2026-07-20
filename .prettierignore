@@ -1,0 +1,8 @@
+node_modules
+dist
+target
+package-lock.json
+apps/desktop/src-tauri/icons
+*.vsp3
+*.stl
+*.step

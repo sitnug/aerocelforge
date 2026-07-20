@@ -1,0 +1,956 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectId": "28637866-1aaf-4b75-8f13-5bf7c37c8c48",
+  "name": "Kestrel — Reference Concept",
+  "revision": "Baseline",
+  "description": "Unconventional three-motor tilt UAV example. All component and performance inputs are illustrative user-entered values, not manufacturer or experimental data.",
+  "createdAt": "2026-07-19T00:00:00.000Z",
+  "updatedAt": "2026-07-19T00:00:00.000Z",
+  "conventions": {
+    "internalUnits": "SI",
+    "bodyFrame": "FRD",
+    "worldFrame": "NED",
+    "angles": "radians",
+    "pressure": "absolute_pascal"
+  },
+  "vehicle": {
+    "name": "Kestrel",
+    "description": "Three independently tilting propulsion units with a conventional lifting wing and twin-boom empennage.",
+    "reference": {
+      "areaM2": 0.82,
+      "spanM": 2.4,
+      "chordM": 0.36,
+      "referencePointM": [0.08, 0, 0.02],
+      "provenance": "user_entered"
+    },
+    "components": [
+      {
+        "id": "36def521-6018-42a7-95c7-3a29fcb82961",
+        "name": "Central fuselage",
+        "type": "fuselage",
+        "parentId": null,
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": { "translationM": [0, 0, 0], "rotationRad": [0, 0, 0], "scale": [1, 1, 1] },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example parametric primitive",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [1.42, 0.28, 0.31],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic primitive; no source CAD is attached"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 2.15,
+          "cgLocalM": [-0.03, 0, 0.02],
+          "inertiaKgM2": [0.065, 0, 0, 0, 0.34, 0, 0, 0, 0.36],
+          "uncertaintyKg": 0.15,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#d6ddd8", "opacity": 1 },
+        "properties": { "primitive": "fuselage", "lengthM": 1.42, "radiusM": 0.14 }
+      },
+      {
+        "id": "eaf5cad8-12ae-48e7-a392-75cf2d03fe67",
+        "name": "Port wing",
+        "type": "wing",
+        "parentId": "36def521-6018-42a7-95c7-3a29fcb82961",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [0.08, -0.67, 0],
+          "rotationRad": [0.02, 0.035, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example trapezoidal wing",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.43, 1.06, 0.035],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic primitive"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.72,
+          "cgLocalM": [0.02, -0.1, 0],
+          "inertiaKgM2": [0.22, 0, 0, 0, 0.018, 0, 0, 0, 0.23],
+          "uncertaintyKg": 0.05,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#aebbb5", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.43,
+          "tipChordM": 0.24,
+          "semiSpanM": 1.06,
+          "twistTipRad": -0.035,
+          "airfoil": "NACA 4412 placeholder geometry"
+        }
+      },
+      {
+        "id": "d591ac2c-b36c-4254-8cdd-81d8c9df7ecc",
+        "name": "Starboard wing",
+        "type": "wing",
+        "parentId": "36def521-6018-42a7-95c7-3a29fcb82961",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [0.08, 0.67, 0],
+          "rotationRad": [-0.02, 0.035, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example trapezoidal wing",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.43, 1.06, 0.035],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic primitive"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.72,
+          "cgLocalM": [0.02, 0.1, 0],
+          "inertiaKgM2": [0.22, 0, 0, 0, 0.018, 0, 0, 0, 0.23],
+          "uncertaintyKg": 0.05,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#aebbb5", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.43,
+          "tipChordM": 0.24,
+          "semiSpanM": 1.06,
+          "twistTipRad": -0.035,
+          "airfoil": "NACA 4412 placeholder geometry"
+        }
+      },
+      {
+        "id": "7d7777fb-c3d6-452b-b562-24f552f6ab95",
+        "name": "Horizontal stabilizer",
+        "type": "horizontal_stabilizer",
+        "parentId": "36def521-6018-42a7-95c7-3a29fcb82961",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.6, 0, -0.02],
+          "rotationRad": [0, -0.02, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example tail",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.26, 0.82, 0.025],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic primitive"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.24,
+          "cgLocalM": [0, 0, 0],
+          "inertiaKgM2": [0.014, 0, 0, 0, 0.002, 0, 0, 0, 0.015],
+          "uncertaintyKg": 0.025,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#94a59e", "opacity": 1 },
+        "properties": { "rootChordM": 0.26, "tipChordM": 0.18, "semiSpanM": 0.41 }
+      },
+      {
+        "id": "78f82c6b-3c72-42de-ae89-a0fd6b93f8e4",
+        "name": "Vertical stabilizer",
+        "type": "vertical_stabilizer",
+        "parentId": "36def521-6018-42a7-95c7-3a29fcb82961",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.62, 0, -0.13],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example fin",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.3, 0.025, 0.34],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic primitive"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.18,
+          "cgLocalM": [0, 0, -0.1],
+          "inertiaKgM2": [0.002, 0, 0, 0, 0.004, 0, 0, 0, 0.003],
+          "uncertaintyKg": 0.02,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#94a59e", "opacity": 1 },
+        "properties": { "rootChordM": 0.3, "tipChordM": 0.13, "heightM": 0.34 }
+      },
+      {
+        "id": "0c11a111-1111-4aaa-8aaa-111111111111",
+        "name": "Port aileron",
+        "type": "aileron",
+        "parentId": "eaf5cad8-12ae-48e7-a392-75cf2d03fe67",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.04, -0.82, 0.012],
+          "rotationRad": [0.02, 0.035, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable port aileron",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.14, 0.44, 0.018],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#55e8c3", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.14,
+          "tipChordM": 0.11,
+          "semiSpanM": 0.44,
+          "aeroControlEffectivenessRad": 0.24434609527920614
+        }
+      },
+      {
+        "id": "0c22a222-2222-4aaa-8aaa-222222222222",
+        "name": "Starboard aileron",
+        "type": "aileron",
+        "parentId": "d591ac2c-b36c-4254-8cdd-81d8c9df7ecc",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.04, 0.82, 0.012],
+          "rotationRad": [-0.02, 0.035, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable starboard aileron",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.14, 0.44, 0.018],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#55e8c3", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.14,
+          "tipChordM": 0.11,
+          "semiSpanM": 0.44,
+          "aeroControlEffectivenessRad": 0.24434609527920614
+        }
+      },
+      {
+        "id": "0c33a333-3333-4aaa-8aaa-333333333333",
+        "name": "Elevator",
+        "type": "elevator",
+        "parentId": "7d7777fb-c3d6-452b-b562-24f552f6ab95",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.71, 0, -0.02],
+          "rotationRad": [0, -0.02, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable elevator",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.12, 0.64, 0.018],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#55e8c3", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.12,
+          "tipChordM": 0.09,
+          "semiSpanM": 0.32,
+          "aeroControlEffectivenessRad": 0.2792526803190927
+        }
+      },
+      {
+        "id": "0c44a444-4444-4aaa-8aaa-444444444444",
+        "name": "Rudder",
+        "type": "rudder",
+        "parentId": "78f82c6b-3c72-42de-ae89-a0fd6b93f8e4",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.72, 0, -0.17],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable rudder",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.12, 0.018, 0.25],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#ffbe59", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.12,
+          "tipChordM": 0.07,
+          "heightM": 0.25,
+          "aeroControlEffectivenessRad": 0.2792526803190927
+        }
+      },
+      {
+        "id": "0c55a555-5555-4aaa-8aaa-555555555555",
+        "name": "Port flap",
+        "type": "flap",
+        "parentId": "eaf5cad8-12ae-48e7-a392-75cf2d03fe67",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.04, -0.35, 0.01],
+          "rotationRad": [0.02, 0.035, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable port flap",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.15, 0.3, 0.018],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#65a8ff", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.15,
+          "tipChordM": 0.13,
+          "semiSpanM": 0.3,
+          "aeroControlEffectivenessRad": 0.3490658503988659
+        }
+      },
+      {
+        "id": "0c66a666-6666-4aaa-8aaa-666666666666",
+        "name": "Starboard flap",
+        "type": "flap",
+        "parentId": "d591ac2c-b36c-4254-8cdd-81d8c9df7ecc",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.04, 0.35, 0.01],
+          "rotationRad": [-0.02, 0.035, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel movable starboard flap",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.15, 0.3, 0.018],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Analytic movable surface"]
+          },
+          "repairs": []
+        },
+        "mass": null,
+        "visual": { "color": "#65a8ff", "opacity": 1 },
+        "properties": {
+          "rootChordM": 0.15,
+          "tipChordM": 0.13,
+          "semiSpanM": 0.3,
+          "aeroControlEffectivenessRad": 0.3490658503988659
+        }
+      },
+      {
+        "id": "17be15fd-65b0-4a26-9207-f3832fc34f04",
+        "name": "Port tilt motor",
+        "type": "motor",
+        "parentId": "eaf5cad8-12ae-48e7-a392-75cf2d03fe67",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [0.14, -0.68, 0.02],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example motor envelope",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.16, 0.09, 0.09],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Envelope geometry, not detailed CAD"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.38,
+          "cgLocalM": [0, 0, 0],
+          "inertiaKgM2": [0.0005, 0, 0, 0, 0.001, 0, 0, 0, 0.001],
+          "uncertaintyKg": 0.03,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#283a38", "opacity": 1 },
+        "properties": { "motorKvRpmPerVolt": 420 }
+      },
+      {
+        "id": "7507683b-4444-413e-a597-e95fc8c70e09",
+        "name": "Starboard tilt motor",
+        "type": "motor",
+        "parentId": "d591ac2c-b36c-4254-8cdd-81d8c9df7ecc",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [0.14, 0.68, 0.02],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example motor envelope",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.16, 0.09, 0.09],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Envelope geometry, not detailed CAD"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.38,
+          "cgLocalM": [0, 0, 0],
+          "inertiaKgM2": [0.0005, 0, 0, 0, 0.001, 0, 0, 0, 0.001],
+          "uncertaintyKg": 0.03,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#283a38", "opacity": 1 },
+        "properties": { "motorKvRpmPerVolt": 420 }
+      },
+      {
+        "id": "8d889f42-f6f3-49dd-a622-c202007101c7",
+        "name": "Aft tilt motor",
+        "type": "motor",
+        "parentId": "36def521-6018-42a7-95c7-3a29fcb82961",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [-0.56, 0, 0.04],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example motor envelope",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.16, 0.09, 0.09],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Envelope geometry, not detailed CAD"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.38,
+          "cgLocalM": [0, 0, 0],
+          "inertiaKgM2": [0.0005, 0, 0, 0, 0.001, 0, 0, 0, 0.001],
+          "uncertaintyKg": 0.03,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#283a38", "opacity": 1 },
+        "properties": { "motorKvRpmPerVolt": 420 }
+      },
+      {
+        "id": "5b59c708-5148-45d0-8f6a-e88340e91376",
+        "name": "Port propeller",
+        "type": "propeller",
+        "parentId": "17be15fd-65b0-4a26-9207-f3832fc34f04",
+        "visible": true,
+        "cfdIncluded": false,
+        "transform": {
+          "translationM": [0.23, -0.68, 0.02],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example propeller disk",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.01, 0.43, 0.43],
+          "health": {
+            "watertight": null,
+            "openEdgeCount": null,
+            "nonManifoldEdgeCount": null,
+            "invertedNormalCount": null,
+            "selfIntersectionCount": null,
+            "status": "not_inspected",
+            "notes": ["Visualization disk; not blade-resolved geometry"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.09,
+          "cgLocalM": [0, 0, 0],
+          "inertiaKgM2": [0.0008, 0, 0, 0, 0.002, 0, 0, 0, 0.002],
+          "uncertaintyKg": 0.01,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#3dd6b4", "opacity": 0.38 },
+        "properties": {
+          "diameterM": 0.43,
+          "pitchM": 0.18,
+          "throttleUpKey": "Digit1",
+          "throttleDownKey": "Digit4"
+        }
+      },
+      {
+        "id": "4f7d033f-e58d-41af-a08d-c8bf3f69c9f5",
+        "name": "Starboard propeller",
+        "type": "propeller",
+        "parentId": "7507683b-4444-413e-a597-e95fc8c70e09",
+        "visible": true,
+        "cfdIncluded": false,
+        "transform": {
+          "translationM": [0.23, 0.68, 0.02],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example propeller disk",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.01, 0.43, 0.43],
+          "health": {
+            "watertight": null,
+            "openEdgeCount": null,
+            "nonManifoldEdgeCount": null,
+            "invertedNormalCount": null,
+            "selfIntersectionCount": null,
+            "status": "not_inspected",
+            "notes": ["Visualization disk; not blade-resolved geometry"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.09,
+          "cgLocalM": [0, 0, 0],
+          "inertiaKgM2": [0.0008, 0, 0, 0, 0.002, 0, 0, 0, 0.002],
+          "uncertaintyKg": 0.01,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#3dd6b4", "opacity": 0.38 },
+        "properties": {
+          "diameterM": 0.43,
+          "pitchM": 0.18,
+          "throttleUpKey": "Digit2",
+          "throttleDownKey": "Digit5"
+        }
+      },
+      {
+        "id": "daabdcf8-2326-429e-9306-ad6e45e3e47f",
+        "name": "Aft propeller",
+        "type": "propeller",
+        "parentId": "8d889f42-f6f3-49dd-a622-c202007101c7",
+        "visible": true,
+        "cfdIncluded": false,
+        "transform": {
+          "translationM": [-0.47, 0, 0.04],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example propeller disk",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.01, 0.43, 0.43],
+          "health": {
+            "watertight": null,
+            "openEdgeCount": null,
+            "nonManifoldEdgeCount": null,
+            "invertedNormalCount": null,
+            "selfIntersectionCount": null,
+            "status": "not_inspected",
+            "notes": ["Visualization disk; not blade-resolved geometry"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.09,
+          "cgLocalM": [0, 0, 0],
+          "inertiaKgM2": [0.0008, 0, 0, 0, 0.002, 0, 0, 0, 0.002],
+          "uncertaintyKg": 0.01,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#3dd6b4", "opacity": 0.38 },
+        "properties": {
+          "diameterM": 0.43,
+          "pitchM": 0.18,
+          "throttleUpKey": "Digit3",
+          "throttleDownKey": "Digit6"
+        }
+      },
+      {
+        "id": "b5afe607-a79b-4e6e-807d-10632bf4b673",
+        "name": "6S flight battery",
+        "type": "battery",
+        "parentId": "36def521-6018-42a7-95c7-3a29fcb82961",
+        "visible": true,
+        "cfdIncluded": false,
+        "transform": {
+          "translationM": [0.04, 0, 0.06],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example battery envelope",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.28, 0.11, 0.09],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Envelope geometry"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 2.25,
+          "cgLocalM": [0, 0, 0],
+          "inertiaKgM2": [0.004, 0, 0, 0, 0.017, 0, 0, 0, 0.018],
+          "uncertaintyKg": 0.05,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#d79b35", "opacity": 1 },
+        "properties": { "series": 6, "capacityAh": 10 }
+      },
+      {
+        "id": "f378b010-8030-4567-96a4-3e003879521f",
+        "name": "Survey payload",
+        "type": "payload",
+        "parentId": "36def521-6018-42a7-95c7-3a29fcb82961",
+        "visible": true,
+        "cfdIncluded": true,
+        "transform": {
+          "translationM": [0.22, 0, 0.12],
+          "rotationRad": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        "geometry": {
+          "kind": "procedural",
+          "source": "Kestrel example payload envelope",
+          "sourceSha256": null,
+          "originalUnits": "m",
+          "boundingBoxM": [0.18, 0.14, 0.12],
+          "health": {
+            "watertight": true,
+            "openEdgeCount": 0,
+            "nonManifoldEdgeCount": 0,
+            "invertedNormalCount": 0,
+            "selfIntersectionCount": 0,
+            "status": "pass",
+            "notes": ["Envelope geometry"]
+          },
+          "repairs": []
+        },
+        "mass": {
+          "valueKg": 0.75,
+          "cgLocalM": [0, 0, 0],
+          "inertiaKgM2": [0.002, 0, 0, 0, 0.003, 0, 0, 0, 0.003],
+          "uncertaintyKg": 0.04,
+          "provenance": "user_entered",
+          "note": "Illustrative example mass"
+        },
+        "visual": { "color": "#687b75", "opacity": 1 },
+        "properties": { "powerW": 18, "sensor": "camera placeholder" }
+      }
+    ],
+    "joints": [
+      {
+        "id": "90bedfe2-50d2-4ce0-b20c-ac3f9af48286",
+        "name": "Port tilt",
+        "type": "revolute",
+        "parentComponentId": "eaf5cad8-12ae-48e7-a392-75cf2d03fe67",
+        "childComponentId": "17be15fd-65b0-4a26-9207-f3832fc34f04",
+        "pivotM": [0.14, -0.68, 0.02],
+        "axis": [0, 1, 0],
+        "neutralRad": 0,
+        "minimumRad": 0,
+        "maximumRad": 1.5707963267948966,
+        "rateLimitRadS": 1.2,
+        "accelerationLimitRadS2": 3.5,
+        "actualRad": 0.8726646259971648,
+        "commandedRad": 0.8726646259971648,
+        "failure": "none",
+        "provenance": "user_entered"
+      },
+      {
+        "id": "bf74b5ee-b732-4458-a003-0e09a42ca8c8",
+        "name": "Starboard tilt",
+        "type": "revolute",
+        "parentComponentId": "d591ac2c-b36c-4254-8cdd-81d8c9df7ecc",
+        "childComponentId": "7507683b-4444-413e-a597-e95fc8c70e09",
+        "pivotM": [0.14, 0.68, 0.02],
+        "axis": [0, 1, 0],
+        "neutralRad": 0,
+        "minimumRad": 0,
+        "maximumRad": 1.5707963267948966,
+        "rateLimitRadS": 1.2,
+        "accelerationLimitRadS2": 3.5,
+        "actualRad": 0.8726646259971648,
+        "commandedRad": 0.8726646259971648,
+        "failure": "none",
+        "provenance": "user_entered"
+      },
+      {
+        "id": "fe752aa1-c331-4b23-9c72-03769353f62b",
+        "name": "Aft tilt",
+        "type": "revolute",
+        "parentComponentId": "36def521-6018-42a7-95c7-3a29fcb82961",
+        "childComponentId": "8d889f42-f6f3-49dd-a622-c202007101c7",
+        "pivotM": [-0.56, 0, 0.04],
+        "axis": [0, 1, 0],
+        "neutralRad": 0,
+        "minimumRad": 0,
+        "maximumRad": 1.5707963267948966,
+        "rateLimitRadS": 1.2,
+        "accelerationLimitRadS2": 3.5,
+        "actualRad": 0.8726646259971648,
+        "commandedRad": 0.8726646259971648,
+        "failure": "none",
+        "provenance": "user_entered"
+      }
+    ],
+    "propulsionUnits": [
+      {
+        "id": "b23320a6-911e-4d4b-a8b3-79dbf53c3b4c",
+        "name": "Port propulsion",
+        "motorComponentId": "17be15fd-65b0-4a26-9207-f3832fc34f04",
+        "propellerComponentId": "5b59c708-5148-45d0-8f6a-e88340e91376",
+        "jointId": "90bedfe2-50d2-4ce0-b20c-ac3f9af48286",
+        "fidelity": "P0",
+        "rotation": "CW",
+        "configuration": "tractor",
+        "axisLocal": [1, 0, 0],
+        "diameterM": 0.43,
+        "pitchM": 0.18,
+        "bladeCount": 2,
+        "motor": {
+          "kvRpmPerVolt": 420,
+          "windingResistanceOhm": 0.045,
+          "noLoadCurrentA": 1.2,
+          "maxCurrentA": 65,
+          "maxPowerW": 1300,
+          "responseTimeS": 0.12,
+          "provenance": "user_entered"
+        }
+      },
+      {
+        "id": "d7b1f1ec-b7cf-41f6-a3d6-2fa22a267eeb",
+        "name": "Starboard propulsion",
+        "motorComponentId": "7507683b-4444-413e-a597-e95fc8c70e09",
+        "propellerComponentId": "4f7d033f-e58d-41af-a08d-c8bf3f69c9f5",
+        "jointId": "bf74b5ee-b732-4458-a003-0e09a42ca8c8",
+        "fidelity": "P0",
+        "rotation": "CCW",
+        "configuration": "tractor",
+        "axisLocal": [1, 0, 0],
+        "diameterM": 0.43,
+        "pitchM": 0.18,
+        "bladeCount": 2,
+        "motor": {
+          "kvRpmPerVolt": 420,
+          "windingResistanceOhm": 0.045,
+          "noLoadCurrentA": 1.2,
+          "maxCurrentA": 65,
+          "maxPowerW": 1300,
+          "responseTimeS": 0.12,
+          "provenance": "user_entered"
+        }
+      },
+      {
+        "id": "45bab6f4-031b-4459-a9ea-99356ff145a4",
+        "name": "Aft propulsion",
+        "motorComponentId": "8d889f42-f6f3-49dd-a622-c202007101c7",
+        "propellerComponentId": "daabdcf8-2326-429e-9306-ad6e45e3e47f",
+        "jointId": "fe752aa1-c331-4b23-9c72-03769353f62b",
+        "fidelity": "P0",
+        "rotation": "CW",
+        "configuration": "tractor",
+        "axisLocal": [1, 0, 0],
+        "diameterM": 0.43,
+        "pitchM": 0.18,
+        "bladeCount": 2,
+        "motor": {
+          "kvRpmPerVolt": 420,
+          "windingResistanceOhm": 0.045,
+          "noLoadCurrentA": 1.2,
+          "maxCurrentA": 65,
+          "maxPowerW": 1300,
+          "responseTimeS": 0.12,
+          "provenance": "user_entered"
+        }
+      }
+    ],
+    "batteries": [
+      {
+        "id": "b5afe607-a79b-4e6e-807d-10632bf4b673",
+        "name": "6S 10 Ah example pack",
+        "chemistry": "LiPo",
+        "series": 6,
+        "parallel": 1,
+        "capacityAh": 10,
+        "cellOpenCircuitVoltageV": 4,
+        "cellInternalResistanceOhm": 0.004,
+        "maxContinuousCurrentA": 120,
+        "stateOfCharge": 0.85,
+        "provenance": "user_entered"
+      }
+    ]
+  },
+  "environment": {
+    "altitudeM": 120,
+    "temperatureK": null,
+    "windNedMS": [3, 1, 0],
+    "turbulence": "none",
+    "provenance": "user_entered"
+  },
+  "results": [],
+  "tags": ["example", "tiltrotor", "three-motor", "unvalidated"],
+  "warnings": [
+    "Kestrel values are illustrative example inputs and have not been experimentally validated.",
+    "The default rapid aerodynamic model is outside its validity range during hover and deep stall.",
+    "Simulation does not certify airworthiness."
+  ]
+}
