@@ -45,10 +45,11 @@ restored with the project at startup.
 
 Open **Parts → Add basic part** to add an editable body block, wing, aileron,
 elevator, rudder, battery, motor, or propeller without importing a file. Select
-the part in **3D model**. Use **Move** and drag a coloured arrow, or choose
-**Turn** and drag a curved ring. The position and turn number boxes update with
-the 3D handles. Clicking a number selects its old value, so typing replaces the
-starting zero instead of stepping by 0.01. The next unconnected motor and
+the part in **3D model**. In **Move**, drag the part itself, a coloured arrow, or
+a coloured square between two arrows. Choose **Rotate** and drag a coloured
+curved arc. The position and rotation boxes update with the 3D handles. Press
+`M` for Move or `R` for Rotate. Clicking a number selects its old value, so typing
+replaces the starting zero instead of stepping by 0.01. The next unconnected motor and
 propeller pair automatically. A lone motor or propeller remains only a shape and
 cannot make thrust.
 

@@ -1109,19 +1109,96 @@ kbd {
   font-size: 9px;
 }
 
-.viewport-edit-hint {
+.viewport-edit-guide {
   position: absolute;
   z-index: 3;
   right: 16px;
   bottom: 18px;
-  padding: 7px 10px;
+  display: grid;
+  gap: 8px;
+  width: min(300px, calc(100% - 32px));
+  padding: 10px 12px;
   border: 1px solid rgb(102 138 128 / 34%);
-  border-radius: 999px;
-  background: rgb(13 20 18 / 88%);
+  border-radius: 10px;
+  background: rgb(13 20 18 / 94%);
   color: #c6ded7;
-  font-size: 9px;
   pointer-events: none;
   backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 22%);
+}
+
+.viewport-edit-guide__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.viewport-edit-guide__heading > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--accent);
+}
+
+.viewport-edit-guide__heading > span {
+  display: grid;
+  gap: 2px;
+}
+
+.viewport-edit-guide__heading strong {
+  color: #ecfff9;
+  font-size: 11px;
+}
+
+.viewport-edit-guide__heading small,
+.viewport-edit-guide__shortcut {
+  color: #94aaa3;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.viewport-edit-guide__axes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.axis-key {
+  padding: 3px 6px;
+  border: 1px solid currentcolor;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 4%);
+  font-size: 8px;
+  font-weight: 700;
+}
+
+.axis-key--red {
+  color: #ff777c;
+}
+
+.axis-key--green {
+  color: #64e8aa;
+}
+
+.axis-key--blue {
+  color: #73a6ff;
+}
+
+.viewport-edit-guide__shortcut kbd {
+  margin: 0 2px 0 5px;
+  padding: 1px 5px;
+  border: 1px solid rgb(139 173 163 / 40%);
+  border-radius: 4px;
+  background: rgb(255 255 255 / 6%);
+  color: #d7ebe5;
+  font: inherit;
+  font-weight: 700;
+}
+
+.viewport-transform-annotation {
+  border: 1px solid rgb(111 236 202 / 42%) !important;
+  background: rgb(11 19 17 / 94%) !important;
+  color: #effffb !important;
+  font: 700 11px/1.2 var(--font-mono) !important;
 }
 
 .quality-light {
@@ -6133,10 +6210,13 @@ kbd {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .geometry-measure-button {
+    display: none;
+  }
+
   .transform-mode-control .tool-button {
-    width: 31px;
-    padding: 0;
-    font-size: 0;
+    padding: 0 9px;
+    font-size: 10px;
   }
 
   .metric-grid--four {

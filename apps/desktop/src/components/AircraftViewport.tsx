@@ -1,10 +1,14 @@
-import { Line, OrbitControls, TransformControls } from "@react-three/drei";
+import { DragControls, Line, OrbitControls, PivotControls } from "@react-three/drei";
 import { Canvas, useFrame, useThree, type ThreeEvent } from "@react-three/fiber";
 import type { AerocelProject, VehicleComponent } from "@aerocel/simulation-schema";
 import type { TriangleMesh } from "@aerocel/geometry-core";
-import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { halfSurfaceSpanDirection } from "../lib/aircraftPresentation";
+import {
+  applySceneTransformMatrix,
+  componentTransformToSceneMatrix
+} from "../lib/viewportTransforms";
 
 export interface ViewportOptions {
   readonly orthographic: boolean;
@@ -576,45 +580,80 @@ function SelectedPartTransform({
   readonly mode: "translate" | "rotate";
   readonly onTransformChange: NonNullable<AircraftViewportProps["onTransformChange"]>;
 }) {
-  const objectRef = useRef<THREE.Group>(null);
-  const dragging = useRef(false);
+  const matrix = useMemo(() => {
+    return componentTransformToSceneMatrix(component.transform, mode);
+  }, [component.transform, mode]);
 
-  useEffect(() => {
-    if (dragging.current || objectRef.current === null) return;
-    const [x, y, z] = bodyToScene(component.transform.translationM);
-    const [roll, pitch, yaw] = component.transform.rotationRad;
-    objectRef.current.position.set(x, y, z);
-    objectRef.current.rotation.set(roll, -yaw, pitch);
-    objectRef.current.updateMatrixWorld();
-  }, [component.transform.rotationRad, component.transform.translationM]);
-
-  const publishTransform = (): void => {
-    const object = objectRef.current;
-    if (object === null) return;
-    const clean = (value: number): number => (Math.abs(value) < 1e-10 ? 0 : value);
-    onTransformChange(component.id, {
-      ...component.transform,
-      translationM: [clean(object.position.x), clean(object.position.z), clean(-object.position.y)],
-      rotationRad: [clean(object.rotation.x), clean(object.rotation.z), clean(-object.rotation.y)]
-    });
+  const publishTransform = (nextMatrix: THREE.Matrix4): void => {
+    onTransformChange(
+      component.id,
+      applySceneTransformMatrix(component.transform, nextMatrix, mode)
+    );
   };
 
   return (
-    <TransformControls
-      mode={mode}
-      space={mode === "translate" ? "world" : "local"}
-      size={0.78}
-      onMouseDown={() => {
-        dragging.current = true;
-      }}
-      onMouseUp={() => {
-        dragging.current = false;
-        publishTransform();
-      }}
-      onObjectChange={publishTransform}
+    <PivotControls
+      matrix={matrix}
+      scale={92}
+      fixed
+      lineWidth={5}
+      axisColors={["#ff5d63", "#4bdc94", "#4d8dff"]}
+      hoveredColor="#ffd166"
+      depthTest={false}
+      annotations
+      annotationsClass="viewport-transform-annotation"
+      disableAxes={mode !== "translate"}
+      disableSliders={mode !== "translate"}
+      disableRotations={mode !== "rotate"}
+      disableScaling
+      onDrag={publishTransform}
     >
-      <group ref={objectRef} />
-    </TransformControls>
+      <group />
+    </PivotControls>
+  );
+}
+
+function SelectedPartDirectDrag({
+  component,
+  onTransformChange
+}: {
+  readonly component: VehicleComponent;
+  readonly onTransformChange: NonNullable<AircraftViewportProps["onTransformChange"]>;
+}) {
+  const matrix = useMemo(() => {
+    return componentTransformToSceneMatrix(component.transform, "translate");
+  }, [component.transform]);
+  const [sizeX, sizeY, sizeZ] = component.geometry.boundingBoxM;
+  const [scaleX, scaleY, scaleZ] = component.transform.scale;
+
+  return (
+    <DragControls
+      matrix={matrix}
+      autoTransform={false}
+      onHover={(hovering) => {
+        document.body.style.cursor = hovering ? "grab" : "default";
+      }}
+      onDrag={(nextMatrix) => {
+        onTransformChange(
+          component.id,
+          applySceneTransformMatrix(component.transform, nextMatrix, "translate")
+        );
+      }}
+      onDragEnd={() => {
+        document.body.style.cursor = "default";
+      }}
+    >
+      <mesh>
+        <boxGeometry
+          args={[
+            Math.max(sizeX * scaleX, 0.14),
+            Math.max(sizeZ * scaleZ, 0.14),
+            Math.max(sizeY * scaleY, 0.14)
+          ]}
+        />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+    </DragControls>
   );
 }
 
@@ -690,7 +729,7 @@ function Scene({
         <group
           position={vehiclePosition}
           {...(vehicleQuaternion === undefined
-            ? { rotation: [0, -0.13, 0] as [number, number, number] }
+            ? { rotation: [0, 0, 0] as [number, number, number] }
             : { quaternion: vehicleQuaternion })}
         >
           {project.vehicle.components
@@ -720,11 +759,19 @@ function Scene({
             selectedComponent !== undefined &&
             transformMode !== undefined &&
             onTransformChange !== undefined && (
-              <SelectedPartTransform
-                component={selectedComponent}
-                mode={transformMode}
-                onTransformChange={onTransformChange}
-              />
+              <>
+                {transformMode === "translate" && (
+                  <SelectedPartDirectDrag
+                    component={selectedComponent}
+                    onTransformChange={onTransformChange}
+                  />
+                )}
+                <SelectedPartTransform
+                  component={selectedComponent}
+                  mode={transformMode}
+                  onTransformChange={onTransformChange}
+                />
+              </>
             )}
           {options.showCg && (
             <group position={bodyToScene(cgBodyM)}>

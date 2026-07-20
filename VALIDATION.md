@@ -79,7 +79,7 @@ No result should receive a validated grade solely because a solver completed.
 
 ## Build record — 2026-07-20, macOS 15.7.3 arm64
 
-- `npm run check`: passed; 91 TypeScript tests, strict type checking, lint,
+- `npm run check`: passed; 94 TypeScript tests, strict type checking, lint,
   formatting, and every workspace build passed.
 - Python 3.9: compilation and 3 unit tests passed; strict mypy and Ruff passed.
 - Scientific orchestrator: real loopback `/health` smoke test passed and correctly
@@ -107,7 +107,7 @@ No result should receive a validated grade solely because a solver completed.
   parsing and commit preconditions are covered by unit tests and the native
   archive layer by Rust tests. A real transmitter/gamepad compatibility matrix
   remains release-qualification evidence.
-- Build note: Vite reports a 1.54 MB initial JavaScript chunk (423 kB gzip), driven
+- Build note: Vite reports a 1.56 MB initial JavaScript chunk (434 kB gzip), driven
   primarily by the native 3D stack. Format loaders are split into separate dynamic
   chunks. Further 3D workspace lazy loading remains a measured performance task;
   it does not affect the local bundle's integrity.

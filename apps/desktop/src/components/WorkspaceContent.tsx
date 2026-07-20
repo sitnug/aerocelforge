@@ -58,7 +58,7 @@ import {
   Upload,
   Wind
 } from "lucide-react";
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { WorkspaceId } from "../App";
 import type { AnalysisOptions, RapidAnalysis } from "../lib/analysis";
 import { addBasicPart, BASIC_PART_LIBRARY, type BasicPartKind } from "../lib/basicParts";
@@ -299,6 +299,21 @@ function safeProjectBaseName(project: AerocelProject): string {
 function GeometryWorkspace(props: WorkspaceContentProps) {
   const selected = props.selectedComponent;
   const [transformMode, setTransformMode] = useState<"translate" | "rotate">("translate");
+  useEffect(() => {
+    const chooseTransformMode = (event: KeyboardEvent): void => {
+      if (selected === null || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      )
+        return;
+      if (event.key.toLowerCase() === "m") setTransformMode("translate");
+      if (event.key.toLowerCase() === "r") setTransformMode("rotate");
+    };
+    window.addEventListener("keydown", chooseTransformMode);
+    return () => window.removeEventListener("keydown", chooseTransformMode);
+  }, [selected]);
   const [nameEdit, setNameEdit] = useState<{
     readonly componentId: string;
     readonly value: string;
@@ -403,7 +418,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             </button>
             <button
               type="button"
-              className="tool-button"
+              className="tool-button geometry-measure-button"
               title="Report the selected component bounding box"
               onClick={() =>
                 props.notify(
@@ -438,10 +453,10 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               className={`tool-button ${transformMode === "rotate" ? "tool-button--active" : ""}`}
               aria-pressed={transformMode === "rotate"}
               disabled={selected === null}
-              title="Turn the selected part with curved 3D handles"
+              title="Rotate the selected part with coloured curved handles"
               onClick={() => setTransformMode("rotate")}
             >
-              <Rotate3d size={15} /> Turn
+              <Rotate3d size={15} /> Rotate
             </button>
           </div>
           <div className="tool-cluster">
@@ -537,10 +552,38 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             </div>
           )}
           {selected !== null && (
-            <div className="viewport-edit-hint" role="status">
-              {transformMode === "translate"
-                ? "Drag an arrow to move this part"
-                : "Drag a curved ring to turn this part"}
+            <div className="viewport-edit-guide" role="status">
+              <span className="viewport-edit-guide__heading">
+                {transformMode === "translate" ? <Move3d size={16} /> : <Rotate3d size={16} />}
+                <span>
+                  <strong>
+                    {transformMode === "translate" ? "Move" : "Rotate"} {selected.name}
+                  </strong>
+                  <small>
+                    {transformMode === "translate"
+                      ? "Drag the part itself, an arrow, or a square between two arrows."
+                      : "Drag a coloured curved arc around the part."}
+                  </small>
+                </span>
+              </span>
+              <span className="viewport-edit-guide__axes" aria-hidden="true">
+                {transformMode === "translate" ? (
+                  <>
+                    <span className="axis-key axis-key--red">X · forward</span>
+                    <span className="axis-key axis-key--blue">Y · sideways</span>
+                    <span className="axis-key axis-key--green">Z · up/down</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="axis-key axis-key--red">Roll</span>
+                    <span className="axis-key axis-key--blue">Pitch</span>
+                    <span className="axis-key axis-key--green">Yaw</span>
+                  </>
+                )}
+              </span>
+              <small className="viewport-edit-guide__shortcut">
+                <kbd>M</kbd> Move <kbd>R</kbd> Rotate
+              </small>
             </div>
           )}
           <div className="view-cube" aria-hidden="true">
@@ -558,9 +601,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               ? "CG appears after part weight is added"
               : `CG ${centerOfGravityM.map((value) => value.toFixed(3)).join(", ")} m`}
           </span>
-          <span>
-            View: drag · Zoom: scroll · Part: arrows or rings · Delete: select, then Delete
-          </span>
+          <span>View: drag empty space · Part: use coloured handles · Zoom: scroll</span>
         </div>
       </section>
       <aside className="inspector-panel">
@@ -727,7 +768,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                   />
                 </label>
               </div>
-              <h3 className="transform-subheading">Turn · degrees</h3>
+              <h3 className="transform-subheading">Rotate · degrees</h3>
               <div className="vector-fields">
                 {(
                   [
@@ -1037,7 +1078,7 @@ function ComponentsWorkspace(props: WorkspaceContentProps) {
     props.onSelect(componentId);
     props.onNavigate("geometry");
     props.notify(
-      `${label} added. Drag the arrows to move it or choose Turn for the curved handles.`
+      `${label} added. Drag the arrows to move it or choose Rotate for the curved handles.`
     );
   };
   return (

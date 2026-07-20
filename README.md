@@ -129,7 +129,8 @@ to the calculations that use them.
 
 You can also open **Parts → Add basic part** to add a body block, wing, aileron,
 elevator, rudder, battery, motor, or propeller. Select it in **3D model**, then
-drag the coloured arrows to move it or choose **Turn** and drag a curved ring.
+drag the part itself, a coloured arrow, or a coloured square to move it. Choose
+**Rotate** and drag a curved arc to rotate it.
 The number boxes accept normal typing: the old zero is selected automatically,
 so the first digit replaces it. The next unconnected motor and propeller pair
 automatically; either shape stays non-powered while it is alone.
