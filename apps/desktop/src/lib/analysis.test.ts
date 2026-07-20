@@ -69,6 +69,22 @@ describe("Kestrel integrated engineering analysis", () => {
     );
   });
 
+  it("keeps aerodynamic and glide analysis available without a battery or propulsion unit", () => {
+    const unpoweredProject = {
+      ...kestrelProject,
+      vehicle: {
+        ...kestrelProject.vehicle,
+        propulsionUnits: [],
+        batteries: []
+      }
+    };
+    const result = runRapidAnalysis(unpoweredProject, defaultAnalysisOptions);
+
+    expect(result.propellers).toHaveLength(0);
+    expect(result.battery.remainingEnergyWhApprox).toBe(0);
+    expect(result.glide.bestGlide.airspeedMS).toBeGreaterThan(0);
+  });
+
   it("uses an imported shape for lift without asking for an airfoil", () => {
     const sha = "e".repeat(64);
     const body = kestrelProject.vehicle.components.find(

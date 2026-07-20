@@ -10,6 +10,7 @@ import {
 import { componentAerodynamicEnabled, defaultAerodynamicEnabled } from "../lib/aircraftPhysics";
 import { displayKeyboardCode, isPropellerBindingAllowed } from "../lib/flightInput";
 import { InfoTip } from "./InfoTip";
+import { NumericInput } from "./NumericInput";
 
 interface NumberPropertyFieldProps {
   readonly id: string;
@@ -24,11 +25,6 @@ interface NumberPropertyFieldProps {
   readonly onCommit: (value: number) => void;
 }
 
-function formatFieldValue(value: number, step: number): string {
-  const decimals = step >= 1 ? 0 : Math.min(6, Math.max(0, Math.ceil(-Math.log10(step))));
-  return String(Number(value.toFixed(decimals)));
-}
-
 function NumberPropertyField({
   id,
   label,
@@ -41,34 +37,10 @@ function NumberPropertyField({
   integer = false,
   onCommit
 }: NumberPropertyFieldProps) {
-  const [draft, setDraft] = useState(formatFieldValue(value, step));
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    setDraft(formatFieldValue(value, step));
     setError(null);
-  }, [step, value]);
-
-  const commit = (): void => {
-    const parsed = Number(draft);
-    if (!Number.isFinite(parsed)) {
-      setError("Enter a number.");
-      return;
-    }
-    if (parsed < minimum || (maximum !== undefined && parsed > maximum)) {
-      setError(
-        maximum === undefined
-          ? `Use ${minimum} or more.`
-          : `Use a value from ${minimum} to ${maximum}.`
-      );
-      return;
-    }
-    if (integer && !Number.isInteger(parsed)) {
-      setError("Use a whole number.");
-      return;
-    }
-    setError(null);
-    if (parsed !== value) onCommit(parsed);
-  };
+  }, [value]);
 
   return (
     <label
@@ -82,25 +54,16 @@ function NumberPropertyField({
         </InfoTip>
       </span>
       <span className="engineering-number-field__control">
-        <input
+        <NumericInput
           id={id}
-          type="number"
-          inputMode="decimal"
-          min={minimum}
-          {...(maximum === undefined ? {} : { max: maximum })}
+          value={value}
+          minimum={minimum}
+          maximum={maximum}
           step={step}
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onBlur={commit}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") event.currentTarget.blur();
-            if (event.key === "Escape") {
-              setDraft(formatFieldValue(value, step));
-              setError(null);
-              event.currentTarget.blur();
-            }
-          }}
-          aria-invalid={error !== null}
+          integer={integer}
+          ariaInvalid={error !== null}
+          onCommit={onCommit}
+          onValidationError={setError}
         />
         <small>{unit}</small>
       </span>
@@ -224,12 +187,16 @@ export function ComponentPropertiesEditor({
     return Number.isFinite(value) ? value : fallback;
   };
 
-  const motorFields = component.type === "motor" && (
+  const hasBuiltInDrive =
+    component.type === "propeller" && propulsionUnit?.motorComponentId === component.id;
+  const motorFields = (component.type === "motor" || hasBuiltInDrive) && (
     <>
       <div className="property-summary">
         <Gauge size={16} />
         <span>
-          <small>CURRENT PROPELLER ESTIMATE</small>
+          <small>
+            {hasBuiltInDrive ? "BUILT-IN DRIVE ESTIMATE" : "CURRENT PROPELLER ESTIMATE"}
+          </small>
           <strong>{estimatedThrustN.toFixed(1)} N at the selected RPM</strong>
         </span>
       </div>
@@ -239,7 +206,11 @@ export function ComponentPropertiesEditor({
           label="Maximum thrust"
           value={configuredMotorThrustN(project, component.id) ?? estimatedThrustN}
           unit="N"
-          help="The strongest push expected from this motor and propeller together. The flight simulator uses this as the motor's limit. Replace the estimate with a thrust-stand result when you have one."
+          help={
+            hasBuiltInDrive
+              ? "The strongest push expected from this powered propeller. No separate motor shape is needed, but you must replace this starter value with a measured thrust result."
+              : "The strongest push expected from this motor and propeller together. The flight simulator uses this as the motor's limit. Replace the estimate with a thrust-stand result when you have one."
+          }
           minimum={0.1}
           step={0.1}
           onCommit={(value) => commit("maximumThrustN", value)}

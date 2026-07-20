@@ -36,10 +36,12 @@ import {
   Info,
   LockKeyhole,
   Maximize2,
+  Move3d,
   Orbit,
   Play,
   Plus,
   RefreshCw,
+  Rotate3d,
   Route,
   Ruler,
   Scale,
@@ -56,9 +58,10 @@ import {
   Upload,
   Wind
 } from "lucide-react";
-import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import type { WorkspaceId } from "../App";
 import type { AnalysisOptions, RapidAnalysis } from "../lib/analysis";
+import { addBasicPart, BASIC_PART_LIBRARY, type BasicPartKind } from "../lib/basicParts";
 import { createDiagnosticBundle, hashText, writeReport, type SystemProfile } from "../lib/native";
 import type { AppTheme } from "../lib/preferences";
 import { AircraftViewport, type ViewportOptions } from "./AircraftViewport";
@@ -67,6 +70,7 @@ import { FlightLab } from "./FlightLab";
 import { GeometryImportDialog } from "./GeometryImportDialog";
 import { InfoTip } from "./InfoTip";
 import { ComponentPropertiesEditor } from "./ComponentPropertiesEditor";
+import { NumericInput } from "./NumericInput";
 
 interface WorkspaceContentProps {
   readonly workspace: WorkspaceId;
@@ -294,6 +298,23 @@ function safeProjectBaseName(project: AerocelProject): string {
 
 function GeometryWorkspace(props: WorkspaceContentProps) {
   const selected = props.selectedComponent;
+  const [transformMode, setTransformMode] = useState<"translate" | "rotate" | "scale">("translate");
+  useEffect(() => {
+    const chooseTransformMode = (event: KeyboardEvent): void => {
+      if (selected === null || event.metaKey || event.ctrlKey || event.altKey) return;
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      )
+        return;
+      if (event.key.toLowerCase() === "m") setTransformMode("translate");
+      if (event.key.toLowerCase() === "r") setTransformMode("rotate");
+      if (event.key.toLowerCase() === "s") setTransformMode("scale");
+    };
+    window.addEventListener("keydown", chooseTransformMode);
+    return () => window.removeEventListener("keydown", chooseTransformMode);
+  }, [selected]);
   const [nameEdit, setNameEdit] = useState<{
     readonly componentId: string;
     readonly value: string;
@@ -358,6 +379,21 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
       return { ...component, transform: { ...component.transform, [field]: vector } };
     });
   };
+  const updateTransformFromViewport = (
+    componentId: string,
+    transform: VehicleComponent["transform"]
+  ): void => {
+    props.setProject((current) => ({
+      ...current,
+      updatedAt: new Date().toISOString(),
+      vehicle: {
+        ...current.vehicle,
+        components: current.vehicle.components.map((component) =>
+          component.id === componentId ? { ...component, transform } : component
+        )
+      }
+    }));
+  };
   const toggleViewport = (key: keyof ViewportOptions): void =>
     props.setViewportOptions((current) => ({ ...current, [key]: !current[key] }));
   const selectedPropulsionUnit = props.project.vehicle.propulsionUnits.find(
@@ -383,7 +419,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             </button>
             <button
               type="button"
-              className="tool-button"
+              className="tool-button geometry-measure-button"
               title="Report the selected component bounding box"
               onClick={() =>
                 props.notify(
@@ -396,6 +432,42 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               }
             >
               <Ruler size={15} /> Measure
+            </button>
+          </div>
+          <div
+            className="tool-cluster transform-mode-control"
+            role="group"
+            aria-label="Edit selected part in 3D"
+          >
+            <button
+              type="button"
+              className={`tool-button ${transformMode === "translate" ? "tool-button--active" : ""}`}
+              aria-pressed={transformMode === "translate"}
+              disabled={selected === null}
+              title="Move the selected part with 3D arrows"
+              onClick={() => setTransformMode("translate")}
+            >
+              <Move3d size={15} /> Move
+            </button>
+            <button
+              type="button"
+              className={`tool-button ${transformMode === "rotate" ? "tool-button--active" : ""}`}
+              aria-pressed={transformMode === "rotate"}
+              disabled={selected === null}
+              title="Rotate the selected part with coloured curved handles"
+              onClick={() => setTransformMode("rotate")}
+            >
+              <Rotate3d size={15} /> Rotate
+            </button>
+            <button
+              type="button"
+              className={`tool-button ${transformMode === "scale" ? "tool-button--active" : ""}`}
+              aria-pressed={transformMode === "scale"}
+              disabled={selected === null}
+              title="Resize the selected part with coloured handles"
+              onClick={() => setTransformMode("scale")}
+            >
+              <Scale size={15} /> Scale
             </button>
           </div>
           <div className="tool-cluster">
@@ -456,6 +528,8 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
             cgBodyM={centerOfGravityM}
             slipstreamRadiusM={0.16}
             geometryAssets={props.geometryAssets}
+            transformMode={transformMode}
+            onTransformChange={updateTransformFromViewport}
           />
           {props.project.vehicle.components.length === 0 && (
             <div className="empty-model-onboarding">
@@ -488,6 +562,60 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               </div>
             </div>
           )}
+          {selected !== null && (
+            <div className="viewport-edit-guide" role="status">
+              <span className="viewport-edit-guide__heading">
+                {transformMode === "translate" ? (
+                  <Move3d size={16} />
+                ) : transformMode === "rotate" ? (
+                  <Rotate3d size={16} />
+                ) : (
+                  <Scale size={16} />
+                )}
+                <span>
+                  <strong>
+                    {transformMode === "translate"
+                      ? "Move"
+                      : transformMode === "rotate"
+                        ? "Rotate"
+                        : "Scale"}{" "}
+                    {selected.name}
+                  </strong>
+                  <small>
+                    {transformMode === "translate"
+                      ? "Drag the part itself, an arrow, or a square between two arrows."
+                      : transformMode === "rotate"
+                        ? "Drag a coloured curved arc around the part."
+                        : "Drag a coloured cube to resize one direction or the centre cube for all directions."}
+                  </small>
+                </span>
+              </span>
+              <span className="viewport-edit-guide__axes" aria-hidden="true">
+                {transformMode === "translate" ? (
+                  <>
+                    <span className="axis-key axis-key--red">X · forward</span>
+                    <span className="axis-key axis-key--blue">Y · sideways</span>
+                    <span className="axis-key axis-key--green">Z · up/down</span>
+                  </>
+                ) : transformMode === "rotate" ? (
+                  <>
+                    <span className="axis-key axis-key--red">Roll · bank</span>
+                    <span className="axis-key axis-key--blue">Pitch · nose up/down</span>
+                    <span className="axis-key axis-key--green">Yaw · nose left/right</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="axis-key axis-key--red">X · length</span>
+                    <span className="axis-key axis-key--blue">Y · width</span>
+                    <span className="axis-key axis-key--green">Z · height</span>
+                  </>
+                )}
+              </span>
+              <small className="viewport-edit-guide__shortcut">
+                <kbd>M</kbd> Move <kbd>R</kbd> Rotate <kbd>S</kbd> Scale
+              </small>
+            </div>
+          )}
           <div className="view-cube" aria-hidden="true">
             <span>TOP</span>
             <strong>FRD</strong>
@@ -503,7 +631,7 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               ? "CG appears after part weight is added"
               : `CG ${centerOfGravityM.map((value) => value.toFixed(3)).join(", ")} m`}
           </span>
-          <span>Turn: drag · Zoom: scroll · Edit: right-click · Delete: select, then Delete</span>
+          <span>View: drag empty space · Part: use coloured handles · Zoom: scroll</span>
         </div>
       </section>
       <aside className="inspector-panel">
@@ -641,39 +769,36 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
               <div className="vector-fields">
                 <label>
                   X
-                  <input
-                    type="number"
-                    step="0.001"
+                  <NumericInput
+                    step={0.001}
+                    precision={3}
                     value={selected.transform.translationM[0]}
-                    onChange={(event) =>
-                      updateTransformVector("translationM", 0, event.target.valueAsNumber)
-                    }
+                    ariaLabel="Part X position in metres"
+                    onCommit={(value) => updateTransformVector("translationM", 0, value)}
                   />
                 </label>
                 <label>
                   Y
-                  <input
-                    type="number"
-                    step="0.001"
+                  <NumericInput
+                    step={0.001}
+                    precision={3}
                     value={selected.transform.translationM[1]}
-                    onChange={(event) =>
-                      updateTransformVector("translationM", 1, event.target.valueAsNumber)
-                    }
+                    ariaLabel="Part Y position in metres"
+                    onCommit={(value) => updateTransformVector("translationM", 1, value)}
                   />
                 </label>
                 <label>
                   Z
-                  <input
-                    type="number"
-                    step="0.001"
+                  <NumericInput
+                    step={0.001}
+                    precision={3}
                     value={selected.transform.translationM[2]}
-                    onChange={(event) =>
-                      updateTransformVector("translationM", 2, event.target.valueAsNumber)
-                    }
+                    ariaLabel="Part Z position in metres"
+                    onCommit={(value) => updateTransformVector("translationM", 2, value)}
                   />
                 </label>
               </div>
-              <h3 className="transform-subheading">Turn · degrees</h3>
+              <h3 className="transform-subheading">Rotate · degrees</h3>
               <div className="vector-fields">
                 {(
                   [
@@ -684,13 +809,12 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                 ).map(([label, axis]) => (
                   <label key={label}>
                     {label}
-                    <input
-                      type="number"
-                      step="0.1"
-                      value={((selected.transform.rotationRad[axis] * 180) / Math.PI).toFixed(2)}
-                      onChange={(event) =>
-                        updateTransformVector("rotationRad", axis, event.target.valueAsNumber)
-                      }
+                    <NumericInput
+                      step={0.1}
+                      precision={2}
+                      value={(selected.transform.rotationRad[axis] * 180) / Math.PI}
+                      ariaLabel={`Part ${label} rotation in degrees`}
+                      onCommit={(value) => updateTransformVector("rotationRad", axis, value)}
                     />
                   </label>
                 ))}
@@ -708,14 +832,13 @@ function GeometryWorkspace(props: WorkspaceContentProps) {
                     ).map(([label, axis]) => (
                       <label key={label}>
                         {label}
-                        <input
-                          type="number"
-                          min="0.0001"
-                          step="0.01"
+                        <NumericInput
+                          minimum={0.0001}
+                          step={0.01}
+                          precision={3}
                           value={selected.transform.scale[axis]}
-                          onChange={(event) =>
-                            updateTransformVector("scale", axis, event.target.valueAsNumber)
-                          }
+                          ariaLabel={`Part ${label} size scale`}
+                          onCommit={(value) => updateTransformVector("scale", axis, value)}
                         />
                       </label>
                     ))}
@@ -978,6 +1101,14 @@ function HomeWorkspace(props: CompleteWorkspaceContentProps) {
 }
 
 function ComponentsWorkspace(props: WorkspaceContentProps) {
+  const [basicPartLibraryOpen, setBasicPartLibraryOpen] = useState(false);
+  const addPart = (kind: BasicPartKind, label: string): void => {
+    const componentId = crypto.randomUUID();
+    props.setProject((current) => addBasicPart(current, kind, componentId));
+    props.onSelect(componentId);
+    props.onNavigate("geometry");
+    props.notify(`${label} added. Use Move, Rotate, or Scale above the 3D view to place it.`);
+  };
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
@@ -986,18 +1117,65 @@ function ComponentsWorkspace(props: WorkspaceContentProps) {
         description="Name each part, connect it to the aircraft, and set how moving parts turn."
         help="A part can be a wing, body, motor, propeller, battery, sensor, or moving joint. Connecting parts makes them move together correctly."
         actions={
-          <button
-            type="button"
-            className="button button--primary"
-            onClick={() => {
-              props.onNavigate("geometry");
-              props.notify("Use Import model to add and inspect a semantic component.");
-            }}
-          >
-            <Plus size={15} /> Add component
-          </button>
+          <>
+            <button
+              type="button"
+              className="button button--quiet"
+              onClick={() => {
+                props.onNavigate("geometry");
+                props.onRequestGeometryImport();
+              }}
+            >
+              <Upload size={15} /> Import model
+            </button>
+            <button
+              type="button"
+              className="button button--primary"
+              aria-expanded={basicPartLibraryOpen}
+              onClick={() => setBasicPartLibraryOpen((current) => !current)}
+            >
+              <Plus size={15} /> Add basic part
+            </button>
+          </>
         }
       />
+      {basicPartLibraryOpen && (
+        <section className="basic-part-library" aria-label="Basic part library">
+          <header>
+            <span>
+              <small>QUICK PARTS</small>
+              <strong>Choose a simple editable shape</strong>
+            </span>
+            <p>
+              It appears in the 3D editor immediately. Enter its real size and weight afterward.
+            </p>
+          </header>
+          <div className="basic-part-library__grid">
+            {BASIC_PART_LIBRARY.map((part) => (
+              <button type="button" key={part.kind} onClick={() => addPart(part.kind, part.label)}>
+                <span className={`basic-part-library__icon basic-part-library__icon--${part.kind}`}>
+                  {part.kind === "battery" ? (
+                    <Battery size={19} />
+                  ) : part.kind === "motor" ||
+                    part.kind === "propeller" ||
+                    part.kind === "motor_propeller" ? (
+                    <Fan size={19} />
+                  ) : part.kind === "body_block" ? (
+                    <Box size={19} />
+                  ) : (
+                    <Wind size={19} />
+                  )}
+                </span>
+                <span>
+                  <strong>{part.label}</strong>
+                  <small>{part.description}</small>
+                </span>
+                <Plus size={15} />
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="split-layout split-layout--wide">
         <section className="section-card">
           <div className="section-card__header">
@@ -1237,6 +1415,32 @@ function MassWorkspace(props: CompleteWorkspaceContentProps) {
 }
 
 function PropulsionWorkspace(props: CompleteWorkspaceContentProps) {
+  if (props.project.vehicle.propulsionUnits.length === 0) {
+    return (
+      <div className="scroll-workspace">
+        <WorkspaceHeader
+          eyebrow="MOTORS & BATTERY"
+          title="Power system"
+          description="Estimate thrust, battery use, and whether the motors and electronics have enough margin."
+          help="Aerocel Forge combines the motor, propeller, speed controller, and battery data. These are estimates until you compare them with a real thrust test."
+          actions={
+            <button
+              className="button button--primary"
+              type="button"
+              disabled
+              title="Add a powered propeller first"
+            >
+              <RefreshCw size={15} /> Update estimate
+            </button>
+          }
+        />
+        <Notice tone="info" title="Add a powered propeller">
+          Open Parts and add Propeller for a working power unit with no visible motor block. Motor +
+          propeller remains available when you want both shapes. Add a battery before powered Fly.
+        </Notice>
+      </div>
+    );
+  }
   return (
     <div className="scroll-workspace">
       <WorkspaceHeader
@@ -1591,16 +1795,13 @@ function AeroWorkspace(props: CompleteWorkspaceContentProps) {
               <small>Use the same area when comparing this CD with another source.</small>
             </span>
             <label>
-              <input
-                type="number"
-                min="0.001"
-                max="10000"
-                step="0.01"
+              <NumericInput
+                minimum={0.001}
+                maximum={10000}
+                step={0.01}
                 value={props.project.vehicle.reference.areaM2}
-                aria-label="Wing reference area in square metres"
-                onChange={(event) => {
-                  const areaM2 = Number(event.target.value);
-                  if (!Number.isFinite(areaM2) || areaM2 <= 0) return;
+                ariaLabel="Wing reference area in square metres"
+                onCommit={(areaM2) => {
                   props.setProject((current) => ({
                     ...current,
                     updatedAt: new Date().toISOString(),
@@ -3355,15 +3556,16 @@ function SettingsWorkspace(props: WorkspaceContentProps) {
                   </label>
                   <label>
                     <span>SSH port</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="65535"
+                    <NumericInput
+                      minimum={1}
+                      maximum={65535}
+                      integer
                       value={hostDraft.port}
-                      onChange={(event) =>
+                      ariaLabel="SSH port"
+                      onCommit={(port) =>
                         setHostDraft((current) => ({
                           ...current,
-                          port: event.target.valueAsNumber
+                          port
                         }))
                       }
                     />

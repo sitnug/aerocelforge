@@ -18,6 +18,7 @@ import {
   Wind
 } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -196,7 +197,8 @@ function ChannelSlider({
   maximum,
   step,
   unit,
-  onChange
+  onChange,
+  disabled = false
 }: {
   readonly label: string;
   readonly value: number;
@@ -205,9 +207,10 @@ function ChannelSlider({
   readonly step: number;
   readonly unit: string;
   readonly onChange: (value: number) => void;
+  readonly disabled?: boolean;
 }) {
   return (
-    <label className="flight-channel-slider">
+    <label className={`flight-channel-slider ${disabled ? "flight-channel-slider--disabled" : ""}`}>
       <span>
         <strong>{label}</strong>
         <output>
@@ -220,6 +223,7 @@ function ChannelSlider({
         max={maximum}
         step={step}
         value={value}
+        disabled={disabled}
         onChange={(event) => onChange(Number(event.target.value))}
       />
     </label>
@@ -287,6 +291,7 @@ function FlightKeyBindingButton({
 }
 
 export function FlightLab(props: FlightLabProps) {
+  const notify = props.notify;
   const battery = props.project.vehicle.batteries[0];
   const model = useMemo<FlightModel>(() => {
     const aspectRatio =
@@ -391,13 +396,18 @@ export function FlightLab(props: FlightLabProps) {
   const hasFlapSurface = aerodynamicControls.some((surface) =>
     ["flap", "brake", "flaperon"].includes(surface.control)
   );
+  const canGlide = aerodynamicControls.length > 0;
 
-  const [preset, setPreset] = useState<FlightPreset>("hover");
-  const [mode, setMode] = useState<FlightMode>("stabilize");
+  const [preset, setPreset] = useState<FlightPreset>(canPoweredFlight ? "hover" : "cruise");
+  const [mode, setMode] = useState<FlightMode>(canPoweredFlight ? "stabilize" : "manual");
   const [running, setRunning] = useState(false);
   const [timeScale, setTimeScale] = useState(1);
-  const [pilot, setPilot] = useState<PilotInput>(() => initialPilot(model, "hover"));
-  const [flight, setFlight] = useState(() => createInitialFlightState(model, "hover"));
+  const [pilot, setPilot] = useState<PilotInput>(() =>
+    initialPilot(model, canPoweredFlight ? "hover" : "cruise")
+  );
+  const [flight, setFlight] = useState(() =>
+    createInitialFlightState(model, canPoweredFlight ? "hover" : "cruise")
+  );
   const [windNorthMS, setWindNorthMS] = useState(0);
   const [windEastMS, setWindEastMS] = useState(0);
   const [windUpMS, setWindUpMS] = useState(0);
@@ -432,6 +442,11 @@ export function FlightLab(props: FlightLabProps) {
     modeRef.current = mode;
   }, [mode]);
   useEffect(() => {
+    if (canPoweredFlight || mode === "manual") return;
+    setMode("manual");
+    setPilot((current) => ({ ...current, throttle: 0, propellerControl: "aircraft" }));
+  }, [canPoweredFlight, mode]);
+  useEffect(() => {
     automationRef.current = automation;
   }, [automation]);
   useEffect(() => {
@@ -439,16 +454,19 @@ export function FlightLab(props: FlightLabProps) {
   }, [windEastMS, windNorthMS, windUpMS]);
 
   const resetFlight = (nextPreset = preset): void => {
-    setPreset(nextPreset);
+    const availablePreset = canPoweredFlight ? nextPreset : "cruise";
+    setPreset(availablePreset);
     setRunning(false);
-    const nextPilot = initialPilot(model, nextPreset);
+    const nextPilot = initialPilot(model, availablePreset);
     setPilot(nextPilot);
-    setFlight(createInitialFlightState(model, nextPreset));
-    setMode(nextPreset === "hover" ? "stabilize" : "altitude_hold");
+    setFlight(createInitialFlightState(model, availablePreset));
+    setMode(
+      canPoweredFlight ? (availablePreset === "hover" ? "stabilize" : "altitude_hold") : "manual"
+    );
     setAutomation((current) => ({
       ...current,
-      targetAltitudeM: nextPreset === "hover" ? 30 : 40,
-      targetAirspeedMS: nextPreset === "hover" ? 0 : 22
+      targetAltitudeM: availablePreset === "hover" ? 30 : 40,
+      targetAirspeedMS: availablePreset === "hover" ? 0 : 22
     }));
   };
 
@@ -497,31 +515,32 @@ export function FlightLab(props: FlightLabProps) {
     );
   };
 
-  const startGlideTest = (): void => {
+  const startGlideTest = useCallback((): void => {
     const nextPilot = initialPilot(model, "cruise");
     setPreset("cruise");
     setPilot({ ...nextPilot, throttle: 0 });
     setFlight(createInitialFlightState(model, "cruise"));
     setMode("manual");
     setRunning(true);
-    props.notify("Glide test started with every propeller at zero power.");
-  };
+    notify("Glide test started with every propeller at zero power.");
+  }, [model, notify]);
 
   useEffect(() => {
     if (projectIdRef.current === props.project.projectId) return;
     projectIdRef.current = props.project.projectId;
-    setPreset("hover");
+    const availablePreset = canPoweredFlight ? "hover" : "cruise";
+    setPreset(availablePreset);
     setRunning(false);
-    setPilot(initialPilot(model, "hover"));
-    setFlight(createInitialFlightState(model, "hover"));
-    setMode("stabilize");
+    setPilot(initialPilot(model, availablePreset));
+    setFlight(createInitialFlightState(model, availablePreset));
+    setMode(canPoweredFlight ? "stabilize" : "manual");
     setAutomation((current) => ({
       ...current,
       targetAltitudeM: 30,
       targetAirspeedMS: 0,
       targetHeadingRad: 0
     }));
-  }, [model, props.project.projectId]);
+  }, [canPoweredFlight, model, props.project.projectId]);
 
   useEffect(() => {
     if (!running) return;
@@ -625,8 +644,10 @@ export function FlightLab(props: FlightLabProps) {
           tiltRad: clamp(current.tiltRad - (5 * Math.PI) / 180, 0, Math.PI / 2)
         }));
       }
-      if (!event.repeat && event.code === "Space" && (running || canPoweredFlight)) {
-        setRunning((current) => !current);
+      if (!event.repeat && event.code === "Space" && (running || canPoweredFlight || canGlide)) {
+        if (running) setRunning(false);
+        else if (canPoweredFlight) setRunning(true);
+        else startGlideTest();
       }
       event.preventDefault();
     };
@@ -679,7 +700,7 @@ export function FlightLab(props: FlightLabProps) {
       window.removeEventListener("keyup", keyUp);
       window.removeEventListener("blur", releaseAll);
     };
-  }, [canPoweredFlight, inputMethod, model.propulsors, running]);
+  }, [canGlide, canPoweredFlight, inputMethod, model.propulsors, running, startGlideTest]);
 
   useEffect(() => {
     if (!focusMode) return;
@@ -801,19 +822,25 @@ export function FlightLab(props: FlightLabProps) {
           <button
             className="button button--primary"
             type="button"
-            onClick={() => setRunning((current) => !current)}
+            onClick={() => {
+              if (running) setRunning(false);
+              else if (canPoweredFlight) setRunning(true);
+              else startGlideTest();
+            }}
             disabled={
               ["crashed", "landed", "battery_depleted"].includes(flight.phase) ||
-              (!running && !canPoweredFlight)
+              (!running && !canPoweredFlight && !canGlide)
             }
             title={
-              !canPoweredFlight
-                ? "Powered flight needs at least one usable propeller setup and a charged battery."
-                : undefined
+              !canPoweredFlight && canGlide
+                ? "Start a manual glide with every motor off."
+                : !canPoweredFlight
+                  ? "Add an aerodynamic surface before starting a glide."
+                  : undefined
             }
           >
             {running ? <Pause size={15} /> : <Play size={15} />}
-            {running ? "Pause" : "Fly"}
+            {running ? "Pause" : canPoweredFlight ? "Fly" : "Start glide"}
           </button>
         </div>
       </header>
@@ -841,15 +868,20 @@ export function FlightLab(props: FlightLabProps) {
           <div className="flight-preflight__blocker" role="status">
             <AlertTriangle size={17} />
             <span>
-              <strong>Powered flight is locked</strong>
+              <strong>Manual glide is available</strong>
               <p>
                 {!hasPropulsion
-                  ? "Add a connected motor and propeller with a positive thrust value. A shape cannot create motor thrust by itself."
-                  : "Add a charged battery before powered flight."}
+                  ? "No propeller thrust will be added. Real movable surfaces can still control the aircraft while it has airspeed."
+                  : "The propellers stay off until a charged battery is added. Real movable surfaces still work in a glide."}
               </p>
             </span>
-            <button type="button" className="button button--quiet" onClick={startGlideTest}>
-              Glide test · motors off
+            <button
+              type="button"
+              className="button button--quiet"
+              disabled={!canGlide}
+              onClick={startGlideTest}
+            >
+              Start glide · motors off
             </button>
           </div>
         )}
@@ -939,6 +971,13 @@ export function FlightLab(props: FlightLabProps) {
             }
             geometryAssets={props.geometryAssets}
             motorTiltRad={flight.motorTiltRad}
+            spinningPropellerIds={
+              new Set(
+                running && canPoweredFlight
+                  ? model.propulsors.map((propulsor) => propulsor.propellerComponentId)
+                  : []
+              )
+            }
             controlSurfaceDeflections={controlSurfaceDeflections}
             flightPose={{
               positionNedM: flight.rigidBody.positionNedM,
@@ -946,6 +985,7 @@ export function FlightLab(props: FlightLabProps) {
               trailNedM: flight.trailNedM
             }}
           />
+          <div className="flight-camera-help">Drag to rotate camera · scroll to zoom</div>
           <div className="flight-hud flight-hud--top">
             <span>
               <small>AIRSPEED</small>
@@ -1088,6 +1128,7 @@ export function FlightLab(props: FlightLabProps) {
                 type="button"
                 className={pilot.propellerControl === "aircraft" ? "is-active" : ""}
                 aria-pressed={pilot.propellerControl === "aircraft"}
+                disabled={!hasPropulsion}
                 onClick={() => choosePropellerControl("aircraft")}
               >
                 <Gauge size={16} />
@@ -1100,7 +1141,7 @@ export function FlightLab(props: FlightLabProps) {
                 type="button"
                 className={pilot.propellerControl === "individual" ? "is-active" : ""}
                 aria-pressed={pilot.propellerControl === "individual"}
-                disabled={model.propulsors.length === 0}
+                disabled={!hasPropulsion}
                 onClick={() => choosePropellerControl("individual")}
               >
                 <Keyboard size={16} />
@@ -1117,7 +1158,15 @@ export function FlightLab(props: FlightLabProps) {
                 key={selection}
                 type="button"
                 className={mode === selection ? "is-active" : ""}
-                disabled={pilot.propellerControl === "individual" && selection !== "manual"}
+                disabled={
+                  (!canPoweredFlight && selection !== "manual") ||
+                  (pilot.propellerControl === "individual" && selection !== "manual")
+                }
+                title={
+                  !canPoweredFlight && selection !== "manual"
+                    ? "Automatic and stabilized modes need usable propulsion. Manual glide remains available."
+                    : undefined
+                }
                 onClick={() => setMode(selection)}
               >
                 {MODE_LABELS[selection]}
@@ -1329,6 +1378,12 @@ export function FlightLab(props: FlightLabProps) {
             <button
               type="button"
               className={preset === "hover" ? "is-active" : ""}
+              disabled={!canPoweredFlight}
+              title={
+                !canPoweredFlight
+                  ? "Hover needs usable propulsion and a charged battery."
+                  : undefined
+              }
               onClick={() => resetFlight("hover")}
             >
               Hover start
@@ -1342,11 +1397,13 @@ export function FlightLab(props: FlightLabProps) {
             </button>
           </div>
           <p className="control-hint">
-            {inputMethod === "keyboard"
-              ? pilot.propellerControl === "individual"
-                ? "Hold each saved propeller key to change that motor. W/S moves real pitch surfaces, A/D moves real bank surfaces, and Z/X moves a real rudder. Missing parts mean no response."
-                : "Hold Shift or Ctrl to change throttle. W/S moves real pitch surfaces, A/D moves real bank surfaces, and Z/X moves a real rudder. Q/E changes motor tilt."
-              : "Use the on-screen sticks or a standard connected gamepad. The left stick handles throttle and turning; the right stick handles pitch and bank."}
+            {!hasPropulsion
+              ? "No propellers are connected, so throttle and motor tilt do nothing. W/S moves real pitch surfaces, A/D moves real bank surfaces, Z/X moves a real rudder, and flaps still change the surface forces."
+              : inputMethod === "keyboard"
+                ? pilot.propellerControl === "individual"
+                  ? "Hold each saved propeller key to change that motor. W/S moves real pitch surfaces, A/D moves real bank surfaces, and Z/X moves a real rudder. Missing parts mean no response."
+                  : "Hold Shift or Ctrl to change throttle. W/S moves real pitch surfaces, A/D moves real bank surfaces, and Z/X moves a real rudder. Q/E changes motor tilt."
+                : "Use the on-screen sticks or a standard connected gamepad. The left stick handles throttle and turning; the right stick handles pitch and bank."}
           </p>
         </section>
 
@@ -1366,6 +1423,15 @@ export function FlightLab(props: FlightLabProps) {
               <Gauge size={14} /> {flight.appliedControls.source}
             </span>
           </div>
+          {!canPoweredFlight && (
+            <div className="flight-automation-disabled" role="status">
+              <AlertTriangle size={15} />
+              <span>
+                <strong>Automatic modes are off</strong>
+                <small>Manual surface control stays available for gliding.</small>
+              </span>
+            </div>
+          )}
           <ChannelSlider
             label="Target altitude"
             value={automation.targetAltitudeM}
@@ -1373,6 +1439,7 @@ export function FlightLab(props: FlightLabProps) {
             maximum={120}
             step={1}
             unit="m"
+            disabled={!canPoweredFlight}
             onChange={(targetAltitudeM) =>
               setAutomation((current) => ({ ...current, targetAltitudeM }))
             }
@@ -1384,6 +1451,7 @@ export function FlightLab(props: FlightLabProps) {
             maximum={35}
             step={1}
             unit="m/s"
+            disabled={!canPoweredFlight}
             onChange={(targetAirspeedMS) =>
               setAutomation((current) => ({ ...current, targetAirspeedMS }))
             }
@@ -1395,6 +1463,7 @@ export function FlightLab(props: FlightLabProps) {
             maximum={360}
             step={1}
             unit="deg"
+            disabled={!canPoweredFlight}
             onChange={(value) =>
               setAutomation((current) => ({
                 ...current,

@@ -23,8 +23,9 @@ results. `Cmd+K` opens screen navigation.
 The default **Bright** theme uses a light background, dark words, and high-contrast
 buttons. **Cockpit** uses dark panels with green and amber details. Choose either
 theme from the top bar or Settings. Small `i` controls explain unfamiliar terms in
-plain language; hover, focus, or click them to open the help card. Theme and skill
-level choices are saved on this computer and never change the aircraft model.
+plain language. Hover over one with the mouse, or focus it with the keyboard, to
+show its help card. A mouse click does not leave the card pinned open. Theme and
+skill level choices are saved on this computer and never change the aircraft model.
 
 ## Geometry and components
 
@@ -41,6 +42,30 @@ and embedded-geometry DAE. Confirm the metre bounding box and source axes before
 can be translated, rotated, non-uniformly scaled, reparented, retyped, or excluded
 from CFD in the inspector. The untouched source is archived by SHA-256 and is
 restored with the project at startup.
+
+Open **Parts → Add basic part** to add an editable body block, wing, aileron,
+elevator, rudder, battery, small motor, propeller, or connected **Motor + propeller**
+without importing a file. Select
+the part in **3D model**. In **Move**, drag the part itself, a coloured arrow, or
+a coloured square between two arrows. Choose **Rotate** and drag a coloured
+curved arc. Choose **Scale** and drag a coloured cube to resize one direction or
+the centre cube to resize all directions. The number boxes update with the 3D
+handles. Press `M` for Move, `R` for Rotate, or `S` for Scale. Clicking a number
+keeps its old value selected through the first mouse click, so typing replaces the
+starting zero instead of appending to it. Adding **Propeller** creates a usable
+powered propeller with no separate visible motor block. Its thrust and power values
+are edited on the propeller itself. If you add a Motor first, the next propeller
+pairs with it. **Motor + propeller** remains an optional two-shape part.
+
+Part rotation follows aircraft axes: Roll banks around the forward axis, Pitch
+moves the nose up or down around the side-to-side axis, and Yaw moves the nose
+left or right around the vertical axis. These axes remain independent even when
+the part already has another rotation.
+
+Outside a text box, `Command-Z` undoes an aircraft change and `Shift-Command-Z`
+redoes it. Select a part and use `Command-C` and `Command-V` to copy and paste it.
+Attached child parts and their matching joint, battery, or propulsion setup are
+copied together. Windows and Linux use Ctrl in place of Command.
 
 To edit a part, right-click it in the 3D view, the left navigator, or the Parts
 table and choose **Edit part**. To remove a part, select it and press **Delete** or
@@ -106,8 +131,11 @@ aileron/elevon/flaperon parts, and Z/X moves a real rudder. If a matching movabl
 part is absent, that axis does nothing. Shift/Ctrl changes combined throttle,
 Q/E changes motor tilt, and Space starts or pauses the fixed-step simulation.
 Choose **Individual propellers** to give each propeller its own increase/decrease
-keys and power setting. Powered Fly remains locked without a usable propeller
-setup and charged battery; the separate glide test keeps all motors at zero.
+keys and power setting. Without a usable propeller setup and charged battery, the
+main action changes to **Start glide** and keeps all motors at zero. Manual surface
+controls and wind still work. Stabilize, Altitude Hold, Return Home, powered
+targets, propeller controls, and Hover start stay disabled until propulsion is
+usable.
 Live telemetry includes
 attitude, airspeed, altitude, wind-relative aerodynamic state, forces, power,
 position, trail, and battery use.

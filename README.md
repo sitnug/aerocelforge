@@ -27,7 +27,7 @@ users can enable **Advanced** tools when they need more detail.
 | Workspace      | What it does                                                                                   |
 | -------------- | ---------------------------------------------------------------------------------------------- |
 | **3D model**   | Import a part or a whole drone, inspect its size, move it, turn it, recolour it, or delete it. |
-| **Parts**      | See the full assembly, parent/child links, joints, and movable parts.                          |
+| **Parts**      | Add simple wings, controls, body blocks, motors, propellers, or batteries and edit each one.   |
 | **Weight**     | Calculate total mass, centre of gravity, and inertia from the current parts.                   |
 | **Power**      | Edit motors, propellers, batteries, thrust, power, current, KV, pitch, and blade count.        |
 | **Airflow**    | Run fast concept-level lift, drag, stability, span-load, and glide estimates.                  |
@@ -127,10 +127,21 @@ capacity, propeller size and custom keys, wing/control-surface dimensions,
 per-part lift/drag/pressure inputs, part weight, visibility, and colour are linked
 to the calculations that use them.
 
+You can also open **Parts → Add basic part** to add a body block, wing, aileron,
+elevator, rudder, battery, motor, or propeller. Select it in **3D model**, then
+drag the part itself, a coloured arrow, or a coloured square to move it. Choose
+**Rotate** and drag a curved arc to rotate it.
+The number boxes accept normal typing: the old zero is selected automatically,
+so the first digit replaces it. A Propeller is a complete powered unit without a
+separate visible motor block. If you add a Motor first, the next propeller pairs
+with it instead. Motor + propeller remains available as an optional two-shape part.
+
 ## Fly the model
 
 Open **Fly**, choose **Controller** or **Keyboard**, select a flight mode, and
-press **Fly**.
+press **Fly**. With no usable propeller, use **Start glide** instead. The aircraft
+starts with forward speed, every motor stays off, and its fitted air surfaces can
+still change the flight path.
 
 ### Keyboard controls
 
@@ -151,9 +162,10 @@ Only the selected input type controls the aircraft, so a connected gamepad does
 not overwrite keyboard input.
 
 Choose **Individual propellers** to set separate power and custom
-increase/decrease keys for every fitted propeller. Powered flight is locked when
-no usable propeller setup or charged battery exists. Air loads are calculated per
-part from local flow, size, angle, position, wind, stall/drag settings, and
+increase/decrease keys for every fitted propeller. Without usable propulsion,
+Stabilize, Altitude Hold, Return Home, powered targets, and propeller controls are
+disabled, while Manual glide remains available. Air loads are calculated per part
+from local flow, size, angle, position, wind, stall/drag settings, and
 control-surface movement; imported meshes add triangle-derived pressure panels.
 
 See [docs/FLIGHT_SIMULATOR.md](docs/FLIGHT_SIMULATOR.md) for flight modes,

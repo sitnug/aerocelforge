@@ -17,9 +17,12 @@ only at the Three.js boundary.
    on-screen Mode 2 sticks or a standard connected gamepad. Keyboard mode accepts
    only the keyboard flight keys, so a connected gamepad cannot overwrite them.
 
-Powered **Fly** is locked unless the project contains a connected motor/propeller
-unit with positive configured thrust and a charged battery. **Glide test · motors
-off** is a separate unpowered test and starts with every propeller at zero.
+Powered **Fly** needs a connected motor/propeller unit with positive configured
+thrust and a charged battery. Without it, the main action becomes **Start glide**.
+The glide starts with forward speed and every propeller at zero. Manual surface
+controls and wind still work. Stabilize, Altitude Hold, Return Home, powered
+targets, propeller controls, and Hover start are disabled until usable propulsion
+is fitted.
 
 Use **View height** to resize the 3D stage from 360 to 800 pixels. The selected
 height is retained locally. **Focus** makes the simulator fill the application
@@ -27,6 +30,12 @@ window and Escape returns to the full engineering workspace. The title-bar
 fullscreen button separately toggles the whole native window or browser view.
 The native macOS window can also be resized normally and has a supported minimum
 size of 1040 by 700 pixels.
+
+Drag anywhere in the 3D flight view to rotate the camera around the aircraft and
+scroll to zoom. The camera keeps following the moving aircraft without discarding
+the angle you chose. Powered procedural propeller blades spin while flying, and motor and
+propeller geometry follows the live tilt angle, including a propeller used without
+a separate visible motor shape.
 
 The left stick asks for rudder/yaw and throttle. The right stick asks for bank
 and pitch. These channels do not create invisible moments: pitch needs an
@@ -64,6 +73,9 @@ and torque.
 - **Return home** flies toward the NED origin, slows inside the home radius, and
   commands a landing profile.
 - **Program** follows the compiled mission behavior and its failsafe choice.
+
+Only **Manual** is available during an unpowered glide. This prevents an
+automatic mode from asking missing motors to correct altitude or attitude.
 
 The autopilot target panel changes altitude, airspeed, heading, north wind, east
 wind, and the Advanced-mode upward/downward wind while the simulation is paused
