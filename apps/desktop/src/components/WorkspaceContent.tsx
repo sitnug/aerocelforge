@@ -1428,16 +1428,15 @@ function PropulsionWorkspace(props: CompleteWorkspaceContentProps) {
               className="button button--primary"
               type="button"
               disabled
-              title="Add a motor and propeller first"
+              title="Add a powered propeller first"
             >
               <RefreshCw size={15} /> Update estimate
             </button>
           }
         />
-        <Notice tone="info" title="Add a motor and propeller">
-          Open Parts and add both a Motor and a Propeller. Aerocel Forge pairs the next unconnected
-          motor and propeller automatically. A propeller shape by itself makes no thrust, and Fly
-          stays in manual glide mode.
+        <Notice tone="info" title="Add a powered propeller">
+          Open Parts and add Propeller for a working power unit with no visible motor block. Motor +
+          propeller remains available when you want both shapes. Add a battery before powered Fly.
         </Notice>
       </div>
     );

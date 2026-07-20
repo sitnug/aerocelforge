@@ -52,9 +52,10 @@ curved arc. Choose **Scale** and drag a coloured cube to resize one direction or
 the centre cube to resize all directions. The number boxes update with the 3D
 handles. Press `M` for Move, `R` for Rotate, or `S` for Scale. Clicking a number
 keeps its old value selected through the first mouse click, so typing replaces the
-starting zero instead of appending to it. The next unconnected motor and propeller
-pair automatically. A lone motor or propeller remains only a shape and cannot make
-thrust.
+starting zero instead of appending to it. Adding **Propeller** creates a usable
+powered propeller with no separate visible motor block. Its thrust and power values
+are edited on the propeller itself. If you add a Motor first, the next propeller
+pairs with it. **Motor + propeller** remains an optional two-shape part.
 
 Outside a text box, `Command-Z` undoes an aircraft change and `Shift-Command-Z`
 redoes it. Select a part and use `Command-C` and `Command-V` to copy and paste it.

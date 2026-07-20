@@ -132,8 +132,9 @@ elevator, rudder, battery, motor, or propeller. Select it in **3D model**, then
 drag the part itself, a coloured arrow, or a coloured square to move it. Choose
 **Rotate** and drag a curved arc to rotate it.
 The number boxes accept normal typing: the old zero is selected automatically,
-so the first digit replaces it. The next unconnected motor and propeller pair
-automatically; either shape stays non-powered while it is alone.
+so the first digit replaces it. A Propeller is a complete powered unit without a
+separate visible motor block. If you add a Motor first, the next propeller pairs
+with it instead. Motor + propeller remains available as an optional two-shape part.
 
 ## Fly the model
 

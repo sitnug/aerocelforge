@@ -13,15 +13,30 @@ describe("basic parts", () => {
     expect(() => parseProject(project)).not.toThrow();
   });
 
-  it("keeps a lone propeller unpowered, then pairs it when a motor is added", () => {
+  it("makes a propeller usable without adding a visible motor", () => {
     const propellerId = "f351282c-577f-45cd-8770-9631468f46c4";
-    const motorId = "f351282c-577f-45cd-8770-9631468f46c5";
     const propellerOnly = addBasicPart(createBlankProject("Basic parts"), "propeller", propellerId);
 
     expect(propellerOnly.vehicle.components[0]?.properties.diameterM).toBe(0.3);
-    expect(propellerOnly.vehicle.propulsionUnits).toHaveLength(0);
+    expect(propellerOnly.vehicle.propulsionUnits).toHaveLength(1);
+    expect(propellerOnly.vehicle.propulsionUnits[0]).toMatchObject({
+      motorComponentId: propellerId,
+      propellerComponentId: propellerId,
+      diameterM: 0.3,
+      pitchM: 0.12,
+      bladeCount: 2
+    });
+    expect(propellerOnly.vehicle.components).toHaveLength(1);
 
-    const paired = addBasicPart(propellerOnly, "motor", motorId);
+    expect(() => parseProject(propellerOnly)).not.toThrow();
+  });
+
+  it("pairs a separately added motor when the motor is added first", () => {
+    const propellerId = "f351282c-577f-45cd-8770-9631468f46c4";
+    const motorId = "f351282c-577f-45cd-8770-9631468f46c5";
+    const motorOnly = addBasicPart(createBlankProject("Basic parts"), "motor", motorId);
+
+    const paired = addBasicPart(motorOnly, "propeller", propellerId);
     expect(paired.vehicle.propulsionUnits[0]).toMatchObject({
       motorComponentId: motorId,
       propellerComponentId: propellerId,
@@ -40,7 +55,7 @@ describe("basic parts", () => {
     expect(project.vehicle.components[0]).toMatchObject({
       id: motorId,
       name: "Motor + propeller 1",
-      geometry: { boundingBoxM: [0.07, 0.045, 0.045] }
+      geometry: { boundingBoxM: [0.045, 0.032, 0.032] }
     });
     expect(project.vehicle.components[1]?.parentId).toBe(motorId);
     expect(project.vehicle.propulsionUnits[0]).toMatchObject({ motorComponentId: motorId });

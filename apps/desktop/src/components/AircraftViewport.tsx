@@ -539,7 +539,7 @@ function ComponentMesh({
         </mesh>
         <PropellerBlades diameterM={propellerDiameter} spinning={spinPropeller} />
         <mesh rotation={[Math.PI / 2, 0, 0]}>
-          <cylinderGeometry args={[0.025, 0.025, 0.035, 18]} />
+          <cylinderGeometry args={[0.016, 0.016, 0.025, 18]} />
           <meshStandardMaterial color="#15211f" metalness={0.6} roughness={0.32} />
         </mesh>
       </Selectable>

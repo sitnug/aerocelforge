@@ -91,11 +91,29 @@ export const BASIC_PART_LIBRARY: readonly BasicPartDefinition[] = [
     }
   },
   {
+    kind: "propeller",
+    label: "Propeller",
+    description: "A powered propeller with no separate motor block in the 3D view.",
+    type: "propeller",
+    boundingBoxM: [0.025, 0.3, 0.3],
+    color: "#91aaa2",
+    cfdIncluded: false,
+    properties: {
+      diameterM: 0.3,
+      pitchM: 0.12,
+      bladeCount: 2,
+      maximumThrustN: 10,
+      motorMaxPowerW: 600,
+      motorMaxCurrentA: 30,
+      motorKvRpmPerVolt: 700
+    }
+  },
+  {
     kind: "motor_propeller",
     label: "Motor + propeller",
     description: "A small matched motor and propeller that is ready to set up and fly.",
     type: "motor",
-    boundingBoxM: [0.07, 0.045, 0.045],
+    boundingBoxM: [0.045, 0.032, 0.032],
     color: "#d3a25a",
     cfdIncluded: false,
     properties: {}
@@ -105,7 +123,7 @@ export const BASIC_PART_LIBRARY: readonly BasicPartDefinition[] = [
     label: "Motor",
     description: "A simple motor body. It pairs with the next unconnected propeller.",
     type: "motor",
-    boundingBoxM: [0.07, 0.045, 0.045],
+    boundingBoxM: [0.045, 0.032, 0.032],
     color: "#d3a25a",
     cfdIncluded: false,
     properties: {
@@ -114,16 +132,6 @@ export const BASIC_PART_LIBRARY: readonly BasicPartDefinition[] = [
       motorMaxCurrentA: 30,
       motorKvRpmPerVolt: 700
     }
-  },
-  {
-    kind: "propeller",
-    label: "Propeller",
-    description: "A two-blade propeller. It pairs with the next unconnected motor.",
-    type: "propeller",
-    boundingBoxM: [0.025, 0.3, 0.3],
-    color: "#91aaa2",
-    cfdIncluded: false,
-    properties: { diameterM: 0.3, pitchM: 0.12, bladeCount: 2 }
   }
 ];
 
@@ -201,7 +209,7 @@ export function addBasicPart(
               parentId: componentId,
               transform: {
                 ...component.transform,
-                translationM: [motorPosition[0] + 0.045, motorPosition[1], motorPosition[2]]
+                translationM: [motorPosition[0] + 0.03, motorPosition[1], motorPosition[2]]
               }
             };
           }
@@ -258,9 +266,9 @@ export function addBasicPart(
     kind === "motor"
       ? component
       : kind === "propeller"
-        ? components.find(
+        ? (components.find(
             (candidate) => candidate.type === "motor" && !usedMotorIds.has(candidate.id)
-          )
+          ) ?? component)
         : undefined;
   const pairedPropeller =
     kind === "propeller"

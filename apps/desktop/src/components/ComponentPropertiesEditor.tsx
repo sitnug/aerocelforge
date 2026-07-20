@@ -187,12 +187,16 @@ export function ComponentPropertiesEditor({
     return Number.isFinite(value) ? value : fallback;
   };
 
-  const motorFields = component.type === "motor" && (
+  const hasBuiltInDrive =
+    component.type === "propeller" && propulsionUnit?.motorComponentId === component.id;
+  const motorFields = (component.type === "motor" || hasBuiltInDrive) && (
     <>
       <div className="property-summary">
         <Gauge size={16} />
         <span>
-          <small>CURRENT PROPELLER ESTIMATE</small>
+          <small>
+            {hasBuiltInDrive ? "BUILT-IN DRIVE ESTIMATE" : "CURRENT PROPELLER ESTIMATE"}
+          </small>
           <strong>{estimatedThrustN.toFixed(1)} N at the selected RPM</strong>
         </span>
       </div>
@@ -202,7 +206,11 @@ export function ComponentPropertiesEditor({
           label="Maximum thrust"
           value={configuredMotorThrustN(project, component.id) ?? estimatedThrustN}
           unit="N"
-          help="The strongest push expected from this motor and propeller together. The flight simulator uses this as the motor's limit. Replace the estimate with a thrust-stand result when you have one."
+          help={
+            hasBuiltInDrive
+              ? "The strongest push expected from this powered propeller. No separate motor shape is needed, but you must replace this starter value with a measured thrust result."
+              : "The strongest push expected from this motor and propeller together. The flight simulator uses this as the motor's limit. Replace the estimate with a thrust-stand result when you have one."
+          }
           minimum={0.1}
           step={0.1}
           onCommit={(value) => commit("maximumThrustN", value)}
